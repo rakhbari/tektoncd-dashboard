@@ -1,51 +1,36 @@
+/*
+Copyright 2019-2020 The Tekton Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+		http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package tekton
 
 import (
 	"github.com/tektoncd/dashboard/pkg/broadcaster"
-	"github.com/tektoncd/dashboard/pkg/endpoints"
+	"github.com/tektoncd/dashboard/pkg/controllers/utils"
 	logging "github.com/tektoncd/dashboard/pkg/logging"
-	v1alpha1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1alpha1"
-	tektoninformer "github.com/tektoncd/pipeline/pkg/client/informers/externalversions"
-	"k8s.io/client-go/tools/cache"
+	tektonresourceinformer "github.com/tektoncd/pipeline/pkg/client/resource/informers/externalversions"
 )
 
-// Registers a Tekton controller/informer for pipelineResources on sharedTektonInformerFactory
-func NewPipelineResourceController(sharedTektonInformerFactory tektoninformer.SharedInformerFactory) {
+// NewPipelineResourceController registers a Tekton controller/informer for
+// pipelineResources on the sharedTektonInformerFactory
+func NewPipelineResourceController(sharedTektonInformerFactory tektonresourceinformer.SharedInformerFactory) {
 	logging.Log.Debug("In NewPipelineResourceController")
-	pipelineResourceInformer := sharedTektonInformerFactory.Tekton().V1alpha1().PipelineResources().Informer()
-	pipelineResourceInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    pipelineResourceCreated,
-		UpdateFunc: pipelineResourceUpdated,
-		DeleteFunc: pipelineResourceDeleted,
-	})
-}
 
-//pipelineResource events
-func pipelineResourceCreated(obj interface{}) {
-	logging.Log.Debugf("PipelineResource Controller detected pipelineResource '%s' created", obj.(*v1alpha1.PipelineResource).Name)
-	data := broadcaster.SocketData{
-		MessageType: broadcaster.PipelineResourceCreated,
-		Payload:     obj,
-	}
-	endpoints.ResourcesChannel <- data
-}
-
-func pipelineResourceUpdated(oldObj, newObj interface{}) {
-	if newObj.(*v1alpha1.PipelineResource).GetResourceVersion() != oldObj.(*v1alpha1.PipelineResource).GetResourceVersion() {
-		logging.Log.Debugf("PipelineResource Controller detected pipelineResource '%s' updated", oldObj.(*v1alpha1.PipelineResource).Name)
-		data := broadcaster.SocketData{
-			MessageType: broadcaster.PipelineResourceUpdated,
-			Payload:     newObj,
-		}
-		endpoints.ResourcesChannel <- data
-	}
-}
-
-func pipelineResourceDeleted(obj interface{}) {
-	logging.Log.Debugf("PipelineResource Controller detected pipelineResource '%s' deleted", obj.(*v1alpha1.PipelineResource).Name)
-	data := broadcaster.SocketData{
-		MessageType: broadcaster.PipelineResourceDeleted,
-		Payload:     obj,
-	}
-	endpoints.ResourcesChannel <- data
+	utils.NewController(
+		"PipelineResource",
+		sharedTektonInformerFactory.Tekton().V1alpha1().PipelineResources().Informer(),
+		broadcaster.PipelineResourceCreated,
+		broadcaster.PipelineResourceUpdated,
+		broadcaster.PipelineResourceDeleted,
+		nil,
+	)
 }

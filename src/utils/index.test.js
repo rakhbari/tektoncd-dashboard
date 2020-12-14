@@ -1,5 +1,5 @@
 /*
-Copyright 2019 The Tekton Authors
+Copyright 2019-2020 The Tekton Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -11,235 +11,182 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+import * as API from '../api';
+
 import {
-  getErrorMessage,
-  getStatus,
-  selectedTask,
+  fetchLogs,
+  followLogs,
+  getLogDownloadButton,
+  getViewChangeHandler,
+  isStale,
   sortRunsByStartTime,
-  stepsStatus,
-  taskRunStep,
   typeToPlural
 } from '.';
 
-it('getErrorMessage falsy', () => {
-  expect(getErrorMessage()).toBeUndefined();
-});
+describe('sortRunsByStartTime', () => {
+  it('should handle missing start time or status', () => {
+    const a = { name: 'a', status: { startTime: '0' } };
+    const b = { name: 'b', status: {} };
+    const c = { name: 'c', status: { startTime: '2' } };
+    const d = { name: 'd', status: { startTime: '1' } };
+    const e = { name: 'e', status: {} };
+    const f = { name: 'f', status: { startTime: '3' } };
+    const g = { name: 'g' };
 
-it('getErrorMessage string', () => {
-  const error = 'this is an error message';
-  expect(getErrorMessage(error)).toEqual(error);
-});
-
-it('getErrorMessage error object', () => {
-  const message = 'this is an error message';
-  const error = new Error(message);
-  expect(getErrorMessage(error)).toEqual(message);
-});
-
-it('getErrorMessage custom object', () => {
-  const message = 'this is an error message';
-  const error = { custom: message };
-  expect(getErrorMessage(error)).toContain(`"custom":"${message}"`);
-});
-
-it('getStatus', () => {
-  const taskRun = {
-    status: {
-      conditions: [
-        {
-          type: 'Succeeded',
-          foo: 'bar'
-        }
-      ]
-    }
-  };
-
-  const status = getStatus(taskRun);
-  expect(status).toMatchObject({
-    foo: 'bar'
+    const runs = [a, b, c, d, e, f, g];
+    /*
+      sort is stable on all modern browsers so
+      input order is preserved for b and e
+     */
+    const sortedRuns = [b, e, g, f, c, d, a];
+    sortRunsByStartTime(runs);
+    expect(runs).toEqual(sortedRuns);
   });
-});
 
-it('getStatus with no conditions', () => {
-  const taskRun = { status: {} };
-  const status = getStatus(taskRun);
-  expect(status).toEqual({});
-});
-
-it('getStatus with no status', () => {
-  const taskRun = {};
-  const status = getStatus(taskRun);
-  expect(status).toEqual({});
-});
-
-it('taskRunSteps with no taskRun', () => {
-  const taskRun = null;
-  const step = taskRunStep('selected run', taskRun);
-  expect(step).toEqual({});
-});
-
-it('taskRunStep with no taskRun', () => {
-  const taskRun = null;
-  const step = taskRunStep('selected run', taskRun);
-  expect(step).toEqual({});
-});
-
-it('taskRunStep with no steps', () => {
-  const taskRun = {};
-  const step = taskRunStep('selected run', taskRun);
-  expect(step).toEqual({});
-});
-
-it('taskRunStep with no steps', () => {
-  const stepName = 'testName';
-  const id = 'id';
-  const targetStep = { id, stepName };
-  const taskRun = { steps: [targetStep] };
-  const step = taskRunStep(id, taskRun);
-  expect(step.stepName).toEqual(stepName);
-});
-
-it('taskRunStep does not contain selected step', () => {
-  const stepName = 'testName';
-  const id = 'id';
-  const targetStep = { id, stepName };
-  const taskRun = { steps: [targetStep] };
-  const step = taskRunStep('wrong id', taskRun);
-  expect(step).toEqual({});
-});
-
-it('taskRunStep with step finds step', () => {
-  const stepName = 'testName';
-  const id = 'id';
-  const targetStep = { id, stepName };
-  const taskRun = { steps: [targetStep] };
-  const step = taskRunStep(id, taskRun);
-  expect(step.stepName).toEqual(stepName);
-});
-
-it('selectedTask find not exists', () => {
-  const taskName = 'testName';
-  const foundTask = selectedTask(taskName, []);
-  expect(foundTask).toEqual(undefined);
-});
-
-it('selectedTask find exists', () => {
-  const taskName = 'testName';
-  const expectedTask = { metadata: { name: taskName } };
-  const foundTask = selectedTask(taskName, [expectedTask]);
-  expect(foundTask.metadata.name).toEqual(taskName);
-});
-
-it('sortRunsByStartTime', () => {
-  const a = { name: 'a', status: { startTime: '0' } };
-  const b = { name: 'b', status: {} };
-  const c = { name: 'c', status: { startTime: '2' } };
-  const d = { name: 'd', status: { startTime: '1' } };
-  const e = { name: 'e', status: {} };
-  const f = { name: 'f', status: { startTime: '3' } };
-
-  const runs = [a, b, c, d, e, f];
-  /*
-    sort is stable on all modern browsers so
-    input order is preserved for b and e
-   */
-  const sortedRuns = [b, e, f, c, d, a];
-  sortRunsByStartTime(runs);
-  expect(runs).toEqual(sortedRuns);
-});
-
-it('stepsStatus no steps', () => {
-  const taskSteps = [];
-  const taskRunStepsStatus = [];
-  const steps = stepsStatus(taskSteps, taskRunStepsStatus);
-  expect(steps).toEqual([]);
-});
-
-it('stepsStatus no status', () => {
-  const taskSteps = [];
-  const taskRunStepsStatus = undefined;
-  const steps = stepsStatus(taskSteps, taskRunStepsStatus);
-  expect(steps).toEqual([]);
-});
-
-it('stepsStatus step is running', () => {
-  const stepName = 'testStep';
-  const taskSteps = [{ name: stepName, image: 'test' }];
-  const taskRunStepsStatus = [
-    {
-      name: stepName,
-      running: { startedAt: '2019' }
-    }
-  ];
-  const steps = stepsStatus(taskSteps, taskRunStepsStatus);
-  const returnedStep = steps[0];
-  expect(returnedStep.status).toEqual('running');
-  expect(returnedStep.stepName).toEqual(stepName);
-});
-
-it('stepsStatus step is completed', () => {
-  const reason = 'completed';
-  const stepName = 'testStep';
-  const taskSteps = [{ name: stepName, image: 'test' }];
-  const taskRunStepsStatus = [
-    {
-      name: stepName,
-      terminated: {
-        exitCode: 0,
-        reason,
-        startedAt: '2019',
-        finishedAt: '2019',
-        containerID: 'containerd://testid'
-      }
-    }
-  ];
-  const steps = stepsStatus(taskSteps, taskRunStepsStatus);
-  const returnedStep = steps[0];
-  expect(returnedStep.status).toEqual('terminated');
-  expect(returnedStep.stepName).toEqual(stepName);
-  expect(returnedStep.reason).toEqual(reason);
-});
-
-it('stepsStatus step is terminated with error', () => {
-  const reason = 'Error';
-  const stepName = 'testStep';
-  const taskSteps = [{ name: stepName, image: 'test' }];
-  const taskRunStepsStatus = [
-    {
-      name: stepName,
-      terminated: {
-        exitCode: 1,
-        reason,
-        startedAt: '2019',
-        finishedAt: '2019',
-        containerID: 'containerd://testid'
-      }
-    }
-  ];
-  const steps = stepsStatus(taskSteps, taskRunStepsStatus);
-  const returnedStep = steps[0];
-  expect(returnedStep.status).toEqual('terminated');
-  expect(returnedStep.stepName).toEqual(stepName);
-  expect(returnedStep.reason).toEqual(reason);
-});
-
-it('stepsStatus step is waiting', () => {
-  const stepName = 'testStep';
-  const taskSteps = [{ name: stepName, image: 'test' }];
-  const taskRunStepsStatus = [{ name: stepName, waiting: {} }];
-  const steps = stepsStatus(taskSteps, taskRunStepsStatus);
-  const returnedStep = steps[0];
-  expect(returnedStep.status).toEqual('waiting');
-});
-
-it('stepsStatus init error', () => {
-  const stepName = 'git-source';
-  const taskRunStepsStatus = [{ name: stepName, terminated: { exitCode: 1 } }];
-  const steps = stepsStatus([], taskRunStepsStatus);
-  const returnedStep = steps[0];
-  expect(returnedStep.status).toEqual('terminated');
+  it('should leave the order unchanged if no startTimes specified', () => {
+    const a = { name: 'a' };
+    const b = { name: 'b' };
+    const runs = [a, b];
+    const sortedRuns = [a, b];
+    sortRunsByStartTime(runs);
+    expect(runs).toEqual(sortedRuns);
+  });
 });
 
 it('typeToPlural', () => {
   expect(typeToPlural('Extension')).toEqual('EXTENSIONS');
+});
+
+it('isStale', () => {
+  const uid = 'fake_uid';
+  const existingResource = {
+    metadata: {
+      uid,
+      resourceVersion: '123'
+    }
+  };
+  const incomingResource = {
+    metadata: {
+      uid,
+      resourceVersion: '45'
+    }
+  };
+  const state = {
+    [uid]: existingResource
+  };
+  expect(isStale(incomingResource, {})).toBe(false);
+  expect(isStale(incomingResource, state)).toBe(true);
+  expect(isStale(existingResource, state)).toBe(false);
+});
+
+describe('fetchLogs', () => {
+  it('should return the pod logs', () => {
+    const namespace = 'default';
+    const podName = 'pipeline-run-123456';
+    const stepName = 'kubectl-apply';
+    const stepStatus = { container: 'step-kubectl-apply' };
+    const taskRun = {
+      metadata: { namespace },
+      status: { podName }
+    };
+
+    const logs = 'fake logs';
+    jest.spyOn(API, 'getPodLog').mockImplementation(() => logs);
+
+    const returnedLogs = fetchLogs(stepName, stepStatus, taskRun);
+    expect(API.getPodLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        container: stepStatus.container,
+        name: podName,
+        namespace
+      })
+    );
+    returnedLogs.then(data => {
+      expect(data).toBe(logs);
+    });
+  });
+
+  it('should not call the API when the pod is not specified', () => {
+    const stepName = 'kubectl-apply';
+    const stepStatus = { container: 'step-kubectl-apply' };
+    const taskRun = { metadata: { namespace: 'default' } };
+    jest.spyOn(API, 'getPodLog');
+
+    fetchLogs(stepName, stepStatus, taskRun);
+    expect(API.getPodLog).not.toHaveBeenCalled();
+  });
+});
+
+describe('followLogs', () => {
+  it('should return the pod logs', () => {
+    const namespace = 'default';
+    const podName = 'pipeline-run-123456';
+    const stepName = 'kubectl-apply';
+    const stepStatus = { container: 'step-kubectl-apply' };
+    const taskRun = {
+      metadata: { namespace },
+      status: { podName }
+    };
+
+    const logs = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('fake logs'));
+      }
+    });
+    jest.spyOn(API, 'getPodLog').mockImplementation(() => logs);
+
+    const returnedLogs = followLogs(stepName, stepStatus, taskRun);
+    expect(API.getPodLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        container: stepStatus.container,
+        name: podName,
+        namespace,
+        stream: true
+      })
+    );
+    returnedLogs.then(data => {
+      expect(data).toBe(logs);
+    });
+  });
+
+  it('should not call the API when the pod is not specified', () => {
+    const stepName = 'kubectl-apply';
+    const stepStatus = { container: 'step-kubectl-apply' };
+    const taskRun = { metadata: { namespace: 'default' } };
+    jest.spyOn(API, 'getPodLog');
+
+    followLogs(stepName, stepStatus, taskRun);
+    expect(API.getPodLog).not.toHaveBeenCalled();
+  });
+});
+
+it('getViewChangeHandler', () => {
+  const url = 'someURL';
+  const history = { push: jest.fn() };
+  const location = { search: '?nonViewQueryParam=someValue' };
+  const match = { url };
+  const handleViewChange = getViewChangeHandler({ history, location, match });
+  const view = 'someView';
+  handleViewChange(view);
+  expect(history.push).toHaveBeenCalledWith(
+    `${url}?nonViewQueryParam=someValue&view=${view}`
+  );
+});
+
+it('getLogDownloadButton', () => {
+  const container = 'fake_container';
+  const namespace = 'fake_namespace';
+  const podName = 'fake_podname';
+  const stepStatus = { container };
+  const taskRun = { metadata: { namespace }, status: { podName } };
+  jest.spyOn(API, 'getPodLogURL');
+
+  const logDownloadButton = getLogDownloadButton({ stepStatus, taskRun });
+
+  expect(API.getPodLogURL).toHaveBeenCalledWith({
+    container,
+    name: podName,
+    namespace
+  });
+  expect(logDownloadButton).toBeTruthy();
 });

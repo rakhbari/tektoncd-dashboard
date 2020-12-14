@@ -12,67 +12,45 @@ limitations under the License.
 */
 
 import React, { Component, Suspense } from 'react';
-
-import ErrorBoundary from '../../components/ErrorBoundary';
+import { injectIntl } from 'react-intl';
+import { ErrorBoundary } from '@tektoncd/dashboard-components';
+import { getTitle, paths, urls } from '@tektoncd/dashboard-utils';
 
 import * as actions from './actions';
 import * as selectors from '../../reducers';
-import { paths, urls } from '../../utils';
 import './globals';
 
-/* istanbul ignore next */
-function dynamicImport(source, name) {
-  return new Promise((resolve, reject) => {
-    const script = document.createElement('script');
-    const moduleId = `__tektonDashboardExtension_${name}`;
-
-    const cleanup = () => {
-      script.remove();
-      URL.revokeObjectURL(script.src);
-      delete window[moduleId];
-    };
-
-    script.type = 'module';
-    script.onerror = () => {
-      reject(new Error(`Failed to import ${source}`));
-      cleanup();
-    };
-
-    script.onload = () => {
-      resolve({ default: window[moduleId] });
-      cleanup();
-    };
-
-    const loaderModule = `import extension from '${source}'; window['${moduleId}'] = extension;`;
-    const loaderBlob = new Blob([loaderModule], { type: 'text/javascript' });
-    script.src = URL.createObjectURL(loaderBlob);
-
-    document.head.appendChild(script);
-  });
-}
-
-export default /* istanbul ignore next */ class Extension extends Component {
+/* istanbul ignore next */ class Extension extends Component {
   constructor(props) {
     super(props);
 
-    const { name, source } = props;
-    const ExtensionComponent = React.lazy(() => {
-      try {
-        return new Function(`return import("${source}")`)(); // eslint-disable-line no-new-func
-      } catch (e) {
-        console.warn('dynamic module import not supported, trying fallback'); // eslint-disable-line no-console
-        return dynamicImport(source, name);
-      }
-    });
+    const { source } = props;
+    const ExtensionComponent = React.lazy(() =>
+      import(/* webpackIgnore: true */ source)
+    );
 
     this.state = { ExtensionComponent };
   }
 
+  componentDidMount() {
+    const { displayName: resourceName } = this.props;
+    document.title = getTitle({
+      page: 'Extension',
+      resourceName
+    });
+  }
+
   render() {
+    const { intl } = this.props;
     const { ExtensionComponent } = this.state;
 
     return (
-      <ErrorBoundary message="Error loading extension">
+      <ErrorBoundary
+        message={intl.formatMessage({
+          id: 'dashboard.extension.error',
+          defaultMessage: 'Error loading extension'
+        })}
+      >
         <Suspense fallback={<div>Loading...</div>}>
           <ExtensionComponent
             actions={actions}
@@ -84,3 +62,5 @@ export default /* istanbul ignore next */ class Extension extends Component {
     );
   }
 }
+
+export default injectIntl(Extension);

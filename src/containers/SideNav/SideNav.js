@@ -1,5 +1,5 @@
 /*
-Copyright 2019 The Tekton Authors
+Copyright 2019-2020 The Tekton Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -13,24 +13,36 @@ limitations under the License.
 
 import React, { Component } from 'react';
 import { connect } from 'react-redux';
-import { generatePath, NavLink } from 'react-router-dom';
+import { matchPath, NavLink } from 'react-router-dom';
+import { injectIntl } from 'react-intl';
 import {
   SideNav as CarbonSideNav,
   SideNavItems,
+  SideNavLink,
   SideNavMenu,
   SideNavMenuItem
 } from 'carbon-components-react';
-
-import { NamespacesDropdown } from '..';
+import {
+  Information20 as AboutIcon,
+  Chip20 as ExtensionsIcon,
+  DocumentImport20 as ImportResourcesIcon
+} from '@carbon/icons-react';
+import { ALL_NAMESPACES, urls } from '@tektoncd/dashboard-utils';
 
 import { selectNamespace } from '../../actions/namespaces';
-import { getExtensions, getSelectedNamespace } from '../../reducers';
-import { ALL_NAMESPACES } from '../../constants';
-import { urls } from '../../utils';
+import {
+  getExtensions,
+  getSelectedNamespace,
+  isReadOnly,
+  isTriggersInstalled
+} from '../../reducers';
+
+import { ReactComponent as KubernetesIcon } from '../../images/kubernetes.svg';
+import { ReactComponent as TektonIcon } from '../../images/tekton-logo-20x20.svg';
 
 import './SideNav.scss';
 
-export class SideNav extends Component {
+class SideNav extends Component {
   componentDidMount() {
     const { match } = this.props;
 
@@ -54,127 +66,225 @@ export class SideNav extends Component {
     }
   }
 
-  getPath(path) {
-    const { match } = this.props;
-    if (match && match.params.namespace) {
-      return urls.byNamespace({ namespace: match.params.namespace, path });
+  getMenuItemProps(to) {
+    const { location } = this.props;
+
+    return {
+      element: NavLink,
+      isActive: !!matchPath(location.pathname, {
+        path: to
+      }),
+      to
+    };
+  }
+
+  getPath(path, namespaced = true) {
+    const { namespace } = this.props;
+    if (namespaced && namespace && namespace !== ALL_NAMESPACES) {
+      return urls.byNamespace({ namespace, path });
     }
 
     return path;
   }
 
-  selectNamespace = event => {
-    const namespace = event.selectedItem.id;
-    const { history, match } = this.props;
-
-    if (!match) {
-      this.props.selectNamespace(namespace);
-      return;
-    }
-
-    if (namespace === ALL_NAMESPACES) {
-      this.props.selectNamespace(namespace);
-      history.push('/');
-      return;
-    }
-
-    const newURL = generatePath(match.path, { namespace, 0: match.params[0] });
-    history.push(newURL);
-  };
-
   render() {
-    const { extensions, namespace } = this.props;
+    const { expanded, extensions, intl } = this.props;
 
     return (
       <CarbonSideNav
-        isFixedNav
-        expanded
+        isFixedNav={expanded}
+        isRail={!expanded}
+        expanded={expanded}
         isChildOfHeader={false}
-        aria-label="Side navigation"
+        aria-label="Main navigation"
       >
         <SideNavItems>
-          <SideNavMenu defaultExpanded title="Tekton">
+          <SideNavMenu
+            defaultExpanded
+            renderIcon={TektonIcon}
+            title={intl.formatMessage({
+              id: 'dashboard.sideNav.tektonResources',
+              defaultMessage: 'Tekton resources'
+            })}
+          >
             <SideNavMenuItem
-              element={NavLink}
-              icon={<span />}
-              to={this.getPath(urls.pipelines.all())}
+              {...this.getMenuItemProps(this.getPath(urls.pipelines.all()))}
             >
               Pipelines
             </SideNavMenuItem>
             <SideNavMenuItem
-              element={NavLink}
-              icon={<span />}
-              to={this.getPath(urls.pipelineRuns.all())}
+              {...this.getMenuItemProps(this.getPath(urls.pipelineRuns.all()))}
             >
               PipelineRuns
             </SideNavMenuItem>
             <SideNavMenuItem
-              element={NavLink}
-              icon={<span />}
-              to={this.getPath(urls.pipelineResources.all())}
+              {...this.getMenuItemProps(
+                this.getPath(urls.pipelineResources.all())
+              )}
             >
               PipelineResources
             </SideNavMenuItem>
             <SideNavMenuItem
-              element={NavLink}
-              icon={<span />}
-              to={this.getPath(urls.tasks.all())}
+              {...this.getMenuItemProps(this.getPath(urls.tasks.all()))}
             >
               Tasks
             </SideNavMenuItem>
             <SideNavMenuItem
-              element={NavLink}
-              icon={<span />}
-              to={urls.clusterTasks.all()}
+              {...this.getMenuItemProps(urls.clusterTasks.all())}
             >
               ClusterTasks
             </SideNavMenuItem>
             <SideNavMenuItem
-              element={NavLink}
-              icon={<span />}
-              to={this.getPath(urls.taskRuns.all())}
+              {...this.getMenuItemProps(this.getPath(urls.taskRuns.all()))}
             >
               TaskRuns
             </SideNavMenuItem>
-          </SideNavMenu>
-          <SideNavMenuItem
-            element={NamespacesDropdown}
-            id="sidenav-namespace-dropdown"
-            selectedItem={{ id: namespace, text: namespace }}
-            showAllNamespaces
-            onChange={this.selectNamespace}
-          />
-          <SideNavMenuItem
-            element={NavLink}
-            icon={<span />}
-            to={urls.importResources()}
-          >
-            Import Tekton resources
-          </SideNavMenuItem>
-          <SideNavMenuItem element={NavLink} icon={<span />} to="/secrets">
-            Secrets
-          </SideNavMenuItem>
-          {extensions.length > 0 &&
-            extensions.map(({ displayName, name }) => (
+            <SideNavMenuItem
+              {...this.getMenuItemProps(this.getPath(urls.conditions.all()))}
+            >
+              Conditions
+            </SideNavMenuItem>
+            {this.props.isTriggersInstalled && (
               <SideNavMenuItem
-                element={NavLink}
-                icon={<span />}
-                to={urls.extensions.byName({ name })}
-                key={name}
-                title={displayName}
+                {...this.getMenuItemProps(
+                  this.getPath(urls.eventListeners.all())
+                )}
               >
-                {displayName}
+                EventListeners
               </SideNavMenuItem>
-            ))}
+            )}
+            {this.props.isTriggersInstalled && (
+              <SideNavMenuItem
+                {...this.getMenuItemProps(
+                  this.getPath(urls.triggerBindings.all())
+                )}
+              >
+                TriggerBindings
+              </SideNavMenuItem>
+            )}
+            {this.props.isTriggersInstalled && (
+              <SideNavMenuItem
+                {...this.getMenuItemProps(urls.clusterTriggerBindings.all())}
+              >
+                ClusterTriggerBindings
+              </SideNavMenuItem>
+            )}
+            {this.props.isTriggersInstalled && (
+              <SideNavMenuItem
+                {...this.getMenuItemProps(
+                  this.getPath(urls.triggerTemplates.all())
+                )}
+              >
+                TriggerTemplates
+              </SideNavMenuItem>
+            )}
+          </SideNavMenu>
+
+          {!this.props.isReadOnly && (
+            <SideNavMenu
+              defaultExpanded
+              renderIcon={KubernetesIcon}
+              title={intl.formatMessage({
+                id: 'dashboard.sideNav.kubernetesResources',
+                defaultMessage: 'Kubernetes resources'
+              })}
+            >
+              <SideNavMenuItem
+                {...this.getMenuItemProps(this.getPath(urls.secrets.all()))}
+              >
+                Secrets
+              </SideNavMenuItem>
+              <SideNavMenuItem
+                {...this.getMenuItemProps(
+                  this.getPath(urls.serviceAccounts.all())
+                )}
+              >
+                ServiceAccounts
+              </SideNavMenuItem>
+            </SideNavMenu>
+          )}
+
+          {extensions.length > 0 && (
+            <SideNavMenu
+              defaultExpanded
+              renderIcon={ExtensionsIcon}
+              title={intl.formatMessage({
+                id: 'dashboard.extensions.title',
+                defaultMessage: 'Extensions'
+              })}
+            >
+              {extensions.map(
+                ({
+                  apiGroup,
+                  apiVersion,
+                  displayName,
+                  extensionType,
+                  name,
+                  namespaced
+                }) => {
+                  const to =
+                    extensionType === 'kubernetes-resource'
+                      ? this.getPath(
+                          urls.kubernetesResources.all({
+                            group: apiGroup,
+                            version: apiVersion,
+                            type: name
+                          }),
+                          namespaced
+                        )
+                      : urls.extensions.byName({ name });
+                  return (
+                    <SideNavMenuItem
+                      {...this.getMenuItemProps(to)}
+                      key={name}
+                      title={displayName}
+                    >
+                      {displayName}
+                    </SideNavMenuItem>
+                  );
+                }
+              )}
+            </SideNavMenu>
+          )}
+
+          {!this.props.isReadOnly && (
+            <SideNavLink
+              element={NavLink}
+              renderIcon={ImportResourcesIcon}
+              to={urls.importResources()}
+            >
+              {intl.formatMessage({
+                id: 'dashboard.importResources.title',
+                defaultMessage: 'Import resources'
+              })}
+            </SideNavLink>
+          )}
+
+          <SideNavLink
+            element={NavLink}
+            renderIcon={AboutIcon}
+            to={urls.about()}
+          >
+            {intl.formatMessage({
+              id: 'dashboard.about.title',
+              defaultMessage: 'About'
+            })}
+          </SideNavLink>
         </SideNavItems>
       </CarbonSideNav>
     );
   }
 }
 
+SideNav.defaultProps = {
+  isTriggersInstalled: false
+};
+
 /* istanbul ignore next */
 const mapStateToProps = state => ({
   extensions: getExtensions(state),
+  isReadOnly: isReadOnly(state),
+  isTriggersInstalled: isTriggersInstalled(state),
   namespace: getSelectedNamespace(state)
 });
 
@@ -182,7 +292,5 @@ const mapDispatchToProps = {
   selectNamespace
 };
 
-export default connect(
-  mapStateToProps,
-  mapDispatchToProps
-)(SideNav);
+export const SideNavWithIntl = injectIntl(SideNav);
+export default connect(mapStateToProps, mapDispatchToProps)(SideNavWithIntl);

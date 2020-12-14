@@ -1,5 +1,5 @@
 /*
-Copyright 2019 The Tekton Authors
+Copyright 2019-2020 The Tekton Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -14,44 +14,58 @@ limitations under the License.
 import React, { Component } from 'react';
 import { connect } from 'react-redux';
 import { Link } from 'react-router-dom';
+import { injectIntl } from 'react-intl';
+import isEqual from 'lodash.isequal';
+import keyBy from 'lodash.keyby';
 import {
-  Button,
   InlineNotification,
-  StructuredListBody,
-  StructuredListCell,
-  StructuredListHead,
-  StructuredListRow,
-  StructuredListSkeleton,
-  StructuredListWrapper
+  ListItem,
+  UnorderedList
 } from 'carbon-components-react';
-import { CreatePipelineRun } from '..';
-import Add from '@carbon/icons-react/lib/add/16';
-import './PipelineRuns.scss';
-
-import { ALL_NAMESPACES } from '../../constants';
 import {
+  Modal,
+  PipelineRuns as PipelineRunsList,
+  StatusFilterDropdown
+} from '@tektoncd/dashboard-components';
+import {
+  generateId,
   getErrorMessage,
+  getFilters,
   getStatus,
-  getStatusIcon,
+  getStatusFilter,
+  getStatusFilterHandler,
+  getTitle,
   isRunning,
-  sortRunsByStartTime,
+  labels,
+  runMatchesStatusFilter,
   urls
-} from '../../utils';
+} from '@tektoncd/dashboard-utils';
+import { Add16 as Add, TrashCan32 as Delete } from '@carbon/icons-react';
+
+import { CreatePipelineRun, ListPageLayout } from '..';
+import { sortRunsByStartTime } from '../../utils';
 import { fetchPipelineRuns } from '../../actions/pipelineRuns';
 
 import {
   getPipelineRuns,
-  getPipelineRunsByPipelineName,
   getPipelineRunsErrorMessage,
   getSelectedNamespace,
-  isFetchingPipelineRuns
+  isFetchingPipelineRuns,
+  isReadOnly,
+  isWebSocketConnected
 } from '../../reducers';
-import CancelButton from '../../components/CancelButton/CancelButton';
-import { cancelPipelineRun } from '../../api';
+import {
+  cancelPipelineRun,
+  deletePipelineRun,
+  rerunPipelineRun
+} from '../../api';
 
 const initialState = {
+  createdPipelineRun: null,
   showCreatePipelineRunModal: false,
-  createdPipelineRun: null
+  showDeleteModal: false,
+  submitError: '',
+  toBeDeleted: []
 };
 
 export /* istanbul ignore next */ class PipelineRuns extends Component {
@@ -66,67 +80,199 @@ export /* istanbul ignore next */ class PipelineRuns extends Component {
   }
 
   componentDidMount() {
+    document.title = getTitle({ page: 'PipelineRuns' });
     this.fetchPipelineRuns();
   }
 
   componentDidUpdate(prevProps) {
-    const { match, namespace } = this.props;
-    const { pipelineName } = match.params;
-    const { match: prevMatch, namespace: prevNamespace } = prevProps;
-    const { pipelineName: prevPipelineName } = prevMatch.params;
+    const { filters, namespace, webSocketConnected } = this.props;
+    const {
+      filters: prevFilters,
+      namespace: prevNamespace,
+      webSocketConnected: prevWebSocketConnected
+    } = prevProps;
 
-    if (namespace !== prevNamespace || pipelineName !== prevPipelineName) {
+    if (namespace !== prevNamespace || !isEqual(filters, prevFilters)) {
       this.reset();
+      this.fetchPipelineRuns();
+    } else if (webSocketConnected && prevWebSocketConnected === false) {
       this.fetchPipelineRuns();
     }
   }
 
-  toggleModal = showCreatePipelineRunModal => {
-    this.setState({ showCreatePipelineRunModal });
-  };
-
   handleCreatePipelineRunSuccess(newPipelineRun) {
     const {
-      metadata: { namespace, name },
-      spec: {
-        pipelineRef: { name: pipelineName }
-      }
+      metadata: { namespace, name }
     } = newPipelineRun;
     const url = urls.pipelineRuns.byName({
       namespace,
-      pipelineName,
       pipelineRunName: name
     });
     this.toggleModal(false);
     this.setState({ createdPipelineRun: { name, url } });
   }
 
+  cancel = pipelineRun => {
+    const { name, namespace } = pipelineRun.metadata;
+    cancelPipelineRun({ name, namespace });
+  };
+
+  closeDeleteModal = () => {
+    this.setState({
+      showDeleteModal: false,
+      toBeDeleted: []
+    });
+  };
+
+  deleteRun = pipelineRun => {
+    const { name, namespace } = pipelineRun.metadata;
+    deletePipelineRun({ name, namespace }).catch(error => {
+      error.response.text().then(text => {
+        const statusCode = error.response.status;
+        let errorMessage = `error code ${statusCode}`;
+        if (text) {
+          errorMessage = `${text} (error code ${statusCode})`;
+        }
+        this.setState({ submitError: errorMessage });
+      });
+    });
+  };
+
+  handleDelete = async () => {
+    const { cancelSelection, toBeDeleted } = this.state;
+    const deletions = toBeDeleted.map(resource => this.deleteRun(resource));
+    this.closeDeleteModal();
+    await Promise.all(deletions);
+    cancelSelection();
+  };
+
+  openDeleteModal = (selectedRows, cancelSelection) => {
+    const pipelineRunsById = keyBy(this.props.pipelineRuns, 'metadata.uid');
+    const toBeDeleted = selectedRows.map(({ id }) => pipelineRunsById[id]);
+    this.setState({ showDeleteModal: true, toBeDeleted, cancelSelection });
+  };
+
+  pipelineRunActions = () => {
+    const { intl } = this.props;
+
+    if (this.props.isReadOnly) {
+      return [];
+    }
+    return [
+      {
+        actionText: intl.formatMessage({
+          id: 'dashboard.cancelPipelineRun.actionText',
+          defaultMessage: 'Stop'
+        }),
+        action: this.cancel,
+        disable: resource => {
+          const { reason, status } = getStatus(resource);
+          return !isRunning(reason, status);
+        },
+        modalProperties: {
+          heading: intl.formatMessage({
+            id: 'dashboard.cancelPipelineRun.heading',
+            defaultMessage: 'Stop PipelineRun'
+          }),
+          primaryButtonText: intl.formatMessage({
+            id: 'dashboard.cancelPipelineRun.primaryText',
+            defaultMessage: 'Stop PipelineRun'
+          }),
+          secondaryButtonText: intl.formatMessage({
+            id: 'dashboard.modal.cancelButton',
+            defaultMessage: 'Cancel'
+          }),
+          body: resource =>
+            intl.formatMessage(
+              {
+                id: 'dashboard.cancelPipelineRun.body',
+                defaultMessage:
+                  'Are you sure you would like to stop PipelineRun {name}?'
+              },
+              { name: resource.metadata.name }
+            )
+        }
+      },
+      {
+        actionText: intl.formatMessage({
+          id: 'dashboard.actions.deleteButton',
+          defaultMessage: 'Delete'
+        }),
+        action: this.deleteRun,
+        danger: true,
+        disable: resource => {
+          const { reason, status } = getStatus(resource);
+          return isRunning(reason, status);
+        },
+        modalProperties: {
+          danger: true,
+          heading: intl.formatMessage({
+            id: 'dashboard.deletePipelineRun.heading',
+            defaultMessage: 'Delete PipelineRun'
+          }),
+          primaryButtonText: intl.formatMessage({
+            id: 'dashboard.actions.deleteButton',
+            defaultMessage: 'Delete'
+          }),
+          secondaryButtonText: intl.formatMessage({
+            id: 'dashboard.modal.cancelButton',
+            defaultMessage: 'Cancel'
+          }),
+          body: resource =>
+            intl.formatMessage(
+              {
+                id: 'dashboard.deletePipelineRun.body',
+                defaultMessage:
+                  'Are you sure you would like to delete PipelineRun {name}?'
+              },
+              { name: resource.metadata.name }
+            )
+        }
+      },
+      {
+        actionText: intl.formatMessage({
+          id: 'dashboard.rerun.actionText',
+          defaultMessage: 'Rerun'
+        }),
+        action: this.rerun
+      }
+    ];
+  };
+
+  rerun = pipelineRun => {
+    rerunPipelineRun(pipelineRun);
+  };
+
+  resetSuccess = () => {
+    this.setState({ createdPipelineRun: false });
+  };
+
+  toggleModal = showCreatePipelineRunModal => {
+    this.setState({ showCreatePipelineRunModal });
+  };
+
   reset() {
     this.setState(initialState);
   }
 
   fetchPipelineRuns() {
-    const { match, namespace } = this.props;
-    const { pipelineName } = match.params;
+    const { filters, namespace } = this.props;
     this.props.fetchPipelineRuns({
-      pipelineName,
+      filters,
       namespace
     });
   }
 
   render() {
     const {
-      match,
       error,
+      intl,
       loading,
+      pipelineRuns,
       namespace: selectedNamespace,
-      pipelineRuns
+      statusFilter
     } = this.props;
-    const { pipelineName } = match.params;
-
-    if (loading) {
-      return <StructuredListSkeleton border />;
-    }
+    const { showDeleteModal, toBeDeleted } = this.state;
 
     if (error) {
       return (
@@ -134,158 +280,180 @@ export /* istanbul ignore next */ class PipelineRuns extends Component {
           kind="error"
           hideCloseButton
           lowContrast
-          title="Error loading PipelineRuns"
+          title={intl.formatMessage({
+            id: 'dashboard.pipelineRuns.error',
+            defaultMessage: 'Error loading PipelineRuns'
+          })}
           subtitle={getErrorMessage(error)}
         />
       );
     }
-
+    const pipelineRunActions = this.pipelineRunActions();
     sortRunsByStartTime(pipelineRuns);
 
+    const toolbarButtons = this.props.isReadOnly
+      ? []
+      : [
+          {
+            onClick: () => this.toggleModal(true),
+            text: intl.formatMessage({
+              id: 'dashboard.actions.createButton',
+              defaultMessage: 'Create'
+            }),
+            icon: Add
+          }
+        ];
+
+    const batchActionButtons = this.props.isReadOnly
+      ? []
+      : [
+          {
+            onClick: this.openDeleteModal,
+            text: intl.formatMessage({
+              id: 'dashboard.actions.deleteButton',
+              defaultMessage: 'Delete'
+            }),
+            icon: Delete
+          }
+        ];
+
+    const filters = (
+      <StatusFilterDropdown
+        id={generateId('status-filter-')}
+        initialSelectedStatus={statusFilter}
+        onChange={({ selectedItem }) => {
+          this.props.setStatusFilter(selectedItem.id);
+        }}
+      />
+    );
+
     return (
-      <>
+      <ListPageLayout title="PipelineRuns" {...this.props}>
         {this.state.createdPipelineRun && (
           <InlineNotification
             kind="success"
-            title="Successfully created PipelineRun"
+            title={intl.formatMessage({
+              id: 'dashboard.pipelineRuns.createSuccess',
+              defaultMessage: 'Successfully created PipelineRun'
+            })}
             subtitle={
               <Link to={this.state.createdPipelineRun.url}>
                 {this.state.createdPipelineRun.name}
               </Link>
             }
+            onCloseButtonClick={this.resetSuccess}
             lowContrast
           />
         )}
-        <Button
-          className="create-pipelinerun-button"
-          iconDescription="Create PipelineRun"
-          renderIcon={Add}
-          onClick={() => this.toggleModal(true)}
-        >
-          Create PipelineRun
-        </Button>
-        <CreatePipelineRun
-          open={this.state.showCreatePipelineRunModal}
-          onClose={() => this.toggleModal(false)}
-          onSuccess={this.handleCreatePipelineRunSuccess}
-          pipelineRef={pipelineName}
-          namespace={selectedNamespace}
-        />
-        <StructuredListWrapper border selection>
-          <StructuredListHead>
-            <StructuredListRow head>
-              <StructuredListCell head>PipelineRun</StructuredListCell>
-              {!pipelineName && (
-                <StructuredListCell head>Pipeline</StructuredListCell>
-              )}
-              {selectedNamespace === ALL_NAMESPACES && (
-                <StructuredListCell head>Namespace</StructuredListCell>
-              )}
-              <StructuredListCell head>Status</StructuredListCell>
-              <StructuredListCell head>Last Transition Time</StructuredListCell>
-              <StructuredListCell head />
-            </StructuredListRow>
-          </StructuredListHead>
-          <StructuredListBody>
-            {!pipelineRuns.length && (
-              <StructuredListRow>
-                <StructuredListCell>
-                  {pipelineName ? (
-                    <span>No PipelineRuns for {pipelineName}</span>
-                  ) : (
-                    <span>No PipelineRuns</span>
-                  )}
-                </StructuredListCell>
-              </StructuredListRow>
-            )}
-            {pipelineRuns.map(pipelineRun => {
-              const { name: pipelineRunName, namespace } = pipelineRun.metadata;
-              const pipelineRefName = pipelineRun.spec.pipelineRef.name;
-              const { lastTransitionTime, reason, status } = getStatus(
-                pipelineRun
-              );
-
-              return (
-                <StructuredListRow
-                  className="definition"
-                  key={pipelineRun.metadata.uid}
-                >
-                  <StructuredListCell>
-                    <Link
-                      to={urls.pipelineRuns.byName({
-                        namespace,
-                        pipelineName: pipelineRefName,
-                        pipelineRunName
-                      })}
-                    >
-                      {pipelineRunName}
-                    </Link>
-                  </StructuredListCell>
-                  {!pipelineName && (
-                    <StructuredListCell>
-                      <Link
-                        to={urls.pipelineRuns.byPipeline({
-                          namespace,
-                          pipelineName: pipelineRefName
-                        })}
-                      >
-                        {pipelineRefName}
-                      </Link>
-                    </StructuredListCell>
-                  )}
-                  {selectedNamespace === ALL_NAMESPACES && (
-                    <StructuredListCell>{namespace}</StructuredListCell>
-                  )}
-                  <StructuredListCell
-                    className="status"
-                    data-reason={reason}
-                    data-status={status}
-                  >
-                    {getStatusIcon({ reason, status })}
-                    {pipelineRun.status.conditions
-                      ? pipelineRun.status.conditions[0].message
-                      : ''}
-                  </StructuredListCell>
-                  <StructuredListCell>{lastTransitionTime}</StructuredListCell>
-                  <StructuredListCell>
-                    {isRunning(reason, status) && (
-                      <CancelButton
-                        type="PipelineRun"
-                        name={pipelineRunName}
-                        onCancel={() =>
-                          cancelPipelineRun({
-                            name: pipelineRunName,
-                            namespace
-                          })
-                        }
-                      />
-                    )}
-                  </StructuredListCell>
-                </StructuredListRow>
-              );
+        {this.state.submitError && (
+          <InlineNotification
+            kind="error"
+            title={intl.formatMessage({
+              id: 'dashboard.error.title',
+              defaultMessage: 'Error:'
             })}
-          </StructuredListBody>
-        </StructuredListWrapper>
-      </>
+            subtitle={getErrorMessage(this.state.submitError)}
+            iconDescription={intl.formatMessage({
+              id: 'dashboard.notification.clear',
+              defaultMessage: 'Clear Notification'
+            })}
+            data-testid="errorNotificationComponent"
+            onCloseButtonClick={this.props.clearNotification}
+            lowContrast
+          />
+        )}
+        {!this.props.isReadOnly && (
+          <CreatePipelineRun
+            open={this.state.showCreatePipelineRunModal}
+            onClose={() => this.toggleModal(false)}
+            onSuccess={this.handleCreatePipelineRunSuccess}
+            pipelineRef={this.props.pipelineName}
+            namespace={selectedNamespace}
+          />
+        )}
+        <PipelineRunsList
+          batchActionButtons={batchActionButtons}
+          filters={filters}
+          loading={loading && !pipelineRuns.length}
+          pipelineRuns={pipelineRuns.filter(run => {
+            return runMatchesStatusFilter({
+              run,
+              statusFilter
+            });
+          })}
+          pipelineRunActions={pipelineRunActions}
+          selectedNamespace={selectedNamespace}
+          toolbarButtons={toolbarButtons}
+        />
+        {showDeleteModal ? (
+          <Modal
+            open={showDeleteModal}
+            primaryButtonText={intl.formatMessage({
+              id: 'dashboard.actions.deleteButton',
+              defaultMessage: 'Delete'
+            })}
+            secondaryButtonText={intl.formatMessage({
+              id: 'dashboard.modal.cancelButton',
+              defaultMessage: 'Cancel'
+            })}
+            modalHeading={intl.formatMessage({
+              id: 'dashboard.pipelineRuns.deleteHeading',
+              defaultMessage: 'Delete PipelineRuns'
+            })}
+            onSecondarySubmit={this.closeDeleteModal}
+            onRequestSubmit={this.handleDelete}
+            onRequestClose={this.closeDeleteModal}
+            danger
+          >
+            <p>
+              {intl.formatMessage({
+                id: 'dashboard.pipelineRuns.deleteConfirm',
+                defaultMessage:
+                  'Are you sure you want to delete these PipelineRuns?'
+              })}
+            </p>
+            <UnorderedList nested>
+              {toBeDeleted.map(pipelineRun => {
+                const { name, namespace } = pipelineRun.metadata;
+                return <ListItem key={`${name}:${namespace}`}>{name}</ListItem>;
+              })}
+            </UnorderedList>
+          </Modal>
+        ) : null}
+      </ListPageLayout>
     );
   }
 }
 
+PipelineRuns.defaultProps = {
+  filters: []
+};
+
 /* istanbul ignore next */
 function mapStateToProps(state, props) {
-  const { namespace: namespaceParam, pipelineName } = props.match.params;
+  const { namespace: namespaceParam } = props.match.params;
+  const filters = getFilters(props.location);
+  const statusFilter = getStatusFilter(props.location);
   const namespace = namespaceParam || getSelectedNamespace(state);
 
+  const pipelineFilter =
+    filters.find(filter => filter.indexOf(`${labels.PIPELINE}=`) !== -1) || '';
+  const pipelineName = pipelineFilter.replace(`${labels.PIPELINE}=`, '');
+
   return {
+    isReadOnly: isReadOnly(state),
     error: getPipelineRunsErrorMessage(state),
     loading: isFetchingPipelineRuns(state),
     namespace,
-    pipelineRuns: pipelineName
-      ? getPipelineRunsByPipelineName(state, {
-          name: props.match.params.pipelineName,
-          namespace
-        })
-      : getPipelineRuns(state, { namespace })
+    filters,
+    pipelineName,
+    pipelineRuns: getPipelineRuns(state, {
+      filters,
+      namespace
+    }),
+    setStatusFilter: getStatusFilterHandler(props),
+    statusFilter,
+    webSocketConnected: isWebSocketConnected(state)
   };
 }
 
@@ -296,4 +464,4 @@ const mapDispatchToProps = {
 export default connect(
   mapStateToProps,
   mapDispatchToProps
-)(PipelineRuns);
+)(injectIntl(PipelineRuns));

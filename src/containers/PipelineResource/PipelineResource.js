@@ -1,5 +1,5 @@
 /*
-Copyright 2019 The Tekton Authors
+Copyright 2019-2020 The Tekton Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -12,20 +12,20 @@ limitations under the License.
 */
 
 import React, { Component } from 'react';
+import { injectIntl } from 'react-intl';
 import PropTypes from 'prop-types';
 import { connect } from 'react-redux';
-import {
-  DataTable,
-  DataTableSkeleton,
-  InlineNotification
-} from 'carbon-components-react';
+import { DataTable } from 'carbon-components-react';
+import { ResourceDetails } from '@tektoncd/dashboard-components';
+import { getTitle } from '@tektoncd/dashboard-utils';
 
 import {
   getPipelineResource,
   getPipelineResourcesErrorMessage,
-  isFetchingPipelineResources
+  isFetchingPipelineResources,
+  isWebSocketConnected
 } from '../../reducers';
-import { getErrorMessage } from '../../utils';
+import { getViewChangeHandler } from '../../utils';
 
 import { fetchPipelineResource } from '../../actions/pipelineResources';
 
@@ -41,13 +41,22 @@ const {
 
 export /* istanbul ignore next */ class PipelineResourceContainer extends Component {
   componentDidMount() {
+    const { match } = this.props;
+    const { pipelineResourceName: resourceName } = match.params;
+    document.title = getTitle({
+      page: 'PipelineResource',
+      resourceName
+    });
     this.fetchData();
   }
 
   componentDidUpdate(prevProps) {
-    const { match } = this.props;
+    const { match, webSocketConnected } = this.props;
     const { namespace, pipelineResourceName } = match.params;
-    const { match: prevMatch } = prevProps;
+    const {
+      match: prevMatch,
+      webSocketConnected: prevWebSocketConnected
+    } = prevProps;
     const {
       namespace: prevNamespace,
       pipelineResourceName: prevPipelineResourceName
@@ -55,7 +64,8 @@ export /* istanbul ignore next */ class PipelineResourceContainer extends Compon
 
     if (
       namespace !== prevNamespace ||
-      pipelineResourceName !== prevPipelineResourceName
+      pipelineResourceName !== prevPipelineResourceName ||
+      (webSocketConnected && prevWebSocketConnected === false)
     ) {
       this.fetchData();
     }
@@ -68,51 +78,28 @@ export /* istanbul ignore next */ class PipelineResourceContainer extends Compon
   }
 
   render() {
-    const { error, loading, match, pipelineResource } = this.props;
-    const { pipelineResourceName } = match.params;
-
-    if (loading) {
-      return (
-        <DataTableSkeleton
-          headers={[
-            { key: 'name', header: 'Param Name' },
-            { key: 'value', header: 'Value' }
-          ]}
-        />
-      );
-    }
-
-    if (error) {
-      return (
-        <InlineNotification
-          kind="error"
-          hideCloseButton
-          lowContrast
-          title="Error loading PipelineResource"
-          subtitle={getErrorMessage(error)}
-        />
-      );
-    }
-
-    if (!pipelineResource) {
-      return (
-        <InlineNotification
-          kind="info"
-          hideCloseButton
-          lowContrast
-          title="Cannot load PipelineResource"
-          subtitle={`PipelineResource ${pipelineResourceName} not found`}
-        />
-      );
-    }
-
-    const { params, secrets, type } = pipelineResource.spec;
+    const { error, intl, loading, pipelineResource, view } = this.props;
+    const { params = [], secrets, type } = pipelineResource?.spec || {};
 
     return (
-      <>
-        <h1>{pipelineResourceName}</h1>
-        <h2>{`Type: ${type}`}</h2>
-
+      <ResourceDetails
+        additionalMetadata={
+          <p>
+            <span>
+              {intl.formatMessage({
+                id: 'dashboard.pipelineResource.type',
+                defaultMessage: 'Type:'
+              })}
+            </span>
+            {type}
+          </p>
+        }
+        error={error}
+        loading={loading}
+        onViewChange={getViewChangeHandler(this.props)}
+        resource={pipelineResource}
+        view={view}
+      >
         <DataTable
           rows={params.map(({ name, value }) => ({
             id: name,
@@ -120,8 +107,20 @@ export /* istanbul ignore next */ class PipelineResourceContainer extends Compon
             value
           }))}
           headers={[
-            { key: 'name', header: 'Name' },
-            { key: 'value', header: 'Value' }
+            {
+              key: 'name',
+              header: intl.formatMessage({
+                id: 'dashboard.tableHeader.name',
+                defaultMessage: 'Name'
+              })
+            },
+            {
+              key: 'value',
+              header: intl.formatMessage({
+                id: 'dashboard.tableHeader.value',
+                defaultMessage: 'Value'
+              })
+            }
           ]}
           render={({
             rows,
@@ -130,7 +129,7 @@ export /* istanbul ignore next */ class PipelineResourceContainer extends Compon
             getRowProps,
             getTableProps
           }) => (
-            <TableContainer title="Params">
+            <TableContainer title="Params" className="tkn--table">
               <Table {...getTableProps()}>
                 <TableHead>
                   <TableRow>
@@ -164,9 +163,27 @@ export /* istanbul ignore next */ class PipelineResourceContainer extends Compon
               secretName
             }))}
             headers={[
-              { key: 'fieldName', header: 'Field Name' },
-              { key: 'secretKey', header: 'Secret Key' },
-              { key: 'secretName', header: 'Secret Name' }
+              {
+                key: 'fieldName',
+                header: intl.formatMessage({
+                  id: 'dashboard.pipelineResource.fieldName',
+                  defaultMessage: 'Field Name'
+                })
+              },
+              {
+                key: 'secretKey',
+                header: intl.formatMessage({
+                  id: 'dashboard.pipelineResource.secretKey',
+                  defaultMessage: 'Secret Key'
+                })
+              },
+              {
+                key: 'secretName',
+                header: intl.formatMessage({
+                  id: 'dashboard.pipelineResource.secretName',
+                  defaultMessage: 'Secret Name'
+                })
+              }
             ]}
             render={({
               rows,
@@ -175,7 +192,7 @@ export /* istanbul ignore next */ class PipelineResourceContainer extends Compon
               getRowProps,
               getTableProps
             }) => (
-              <TableContainer title="Secrets">
+              <TableContainer title="Secrets" className="tkn--table">
                 <Table {...getTableProps()}>
                   <TableHead>
                     <TableRow>
@@ -200,7 +217,7 @@ export /* istanbul ignore next */ class PipelineResourceContainer extends Compon
             )}
           />
         )}
-      </>
+      </ResourceDetails>
     );
   }
 }
@@ -216,8 +233,11 @@ PipelineResourceContainer.propTypes = {
 
 /* istanbul ignore next */
 function mapStateToProps(state, ownProps) {
-  const { match } = ownProps;
+  const { location, match } = ownProps;
   const { namespace, pipelineResourceName: name } = match.params;
+
+  const queryParams = new URLSearchParams(location.search);
+  const view = queryParams.get('view');
 
   return {
     error: getPipelineResourcesErrorMessage(state),
@@ -226,7 +246,9 @@ function mapStateToProps(state, ownProps) {
     pipelineResource: getPipelineResource(state, {
       name,
       namespace
-    })
+    }),
+    view,
+    webSocketConnected: isWebSocketConnected(state)
   };
 }
 
@@ -237,4 +259,4 @@ const mapDispatchToProps = {
 export default connect(
   mapStateToProps,
   mapDispatchToProps
-)(PipelineResourceContainer);
+)(injectIntl(PipelineResourceContainer));

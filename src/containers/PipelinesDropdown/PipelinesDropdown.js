@@ -12,16 +12,18 @@ limitations under the License.
 */
 
 import React from 'react';
+import { injectIntl } from 'react-intl';
 import { connect } from 'react-redux';
+import { ALL_NAMESPACES } from '@tektoncd/dashboard-utils';
+import { TooltipDropdown } from '@tektoncd/dashboard-components';
 
 import {
   getPipelines,
   getSelectedNamespace,
-  isFetchingPipelines
+  isFetchingPipelines,
+  isWebSocketConnected
 } from '../../reducers';
 import { fetchPipelines } from '../../actions/pipelines';
-import TooltipDropdown from '../../components/TooltipDropdown';
-import { ALL_NAMESPACES } from '../../constants';
 
 class PipelinesDropdown extends React.Component {
   componentDidMount() {
@@ -30,26 +32,55 @@ class PipelinesDropdown extends React.Component {
   }
 
   componentDidUpdate(prevProps) {
-    const { namespace } = this.props;
-    if (namespace !== prevProps.namespace) {
+    const { namespace, webSocketConnected } = this.props;
+    const { webSocketConnected: prevWebSocketConnected } = prevProps;
+    if (
+      namespace !== prevProps.namespace ||
+      (webSocketConnected && prevWebSocketConnected === false)
+    ) {
       this.props.fetchPipelines({ namespace });
     }
   }
 
   render() {
-    const { namespace, ...rest } = this.props;
+    const {
+      fetchPipelines: _fetchPipelines,
+      intl,
+      label,
+      namespace,
+      webSocketConnected,
+      ...rest
+    } = this.props;
     const emptyText =
       namespace === ALL_NAMESPACES
-        ? `No Pipelines found`
-        : `No Pipelines found in the '${namespace}' namespace`;
-    return <TooltipDropdown {...rest} emptyText={emptyText} />;
+        ? intl.formatMessage({
+            id: 'dashboard.pipelinesDropdown.empty.allNamespaces',
+            defaultMessage: 'No Pipelines found'
+          })
+        : intl.formatMessage(
+            {
+              id: 'dashboard.pipelinesDropdown.empty.selectedNamespace',
+              defaultMessage:
+                "No Pipelines found in the ''{namespace}'' namespace"
+            },
+            { namespace }
+          );
+
+    const labelString =
+      label ||
+      intl.formatMessage({
+        id: 'dashboard.pipelinesDropdown.label',
+        defaultMessage: 'Select Pipeline'
+      });
+    return (
+      <TooltipDropdown {...rest} emptyText={emptyText} label={labelString} />
+    );
   }
 }
 
 PipelinesDropdown.defaultProps = {
   items: [],
   loading: false,
-  label: 'Select Pipeline',
   titleText: 'Pipeline'
 };
 
@@ -60,7 +91,8 @@ function mapStateToProps(state, ownProps) {
       pipeline => pipeline.metadata.name
     ),
     loading: isFetchingPipelines(state),
-    namespace
+    namespace,
+    webSocketConnected: isWebSocketConnected(state)
   };
 }
 
@@ -71,4 +103,4 @@ const mapDispatchToProps = {
 export default connect(
   mapStateToProps,
   mapDispatchToProps
-)(PipelinesDropdown);
+)(injectIntl(PipelinesDropdown));

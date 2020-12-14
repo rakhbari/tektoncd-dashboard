@@ -1,5 +1,5 @@
 /*
-Copyright 2019 The Tekton Authors
+Copyright 2019-2020 The Tekton Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -12,9 +12,7 @@ limitations under the License.
 */
 
 import React from 'react';
-import { storiesOf } from '@storybook/react';
 import { action } from '@storybook/addon-actions';
-import { boolean } from '@storybook/addon-knobs';
 import { Provider } from 'react-redux';
 import configureStore from 'redux-mock-store';
 import thunk from 'redux-thunk';
@@ -36,34 +34,39 @@ const byName = {
 const middleware = [thunk];
 const mockStore = configureStore(middleware);
 
-storiesOf('NamespacesDropdown', module)
-  .add('default', () => {
+export default {
+  component: NamespacesDropdown,
+  title: 'Containers/Dropdowns/NamespacesDropdown'
+};
+
+export const Base = args => <NamespacesDropdown {...props} {...args} />;
+Base.args = {
+  showAllNamespaces: false
+};
+Base.decorators = [
+  storyFn => {
     const store = mockStore({
       namespaces: {
         byName,
         isFetching: false
-      }
+      },
+      properties: {}
     });
 
-    return (
-      <Provider store={store}>
-        <NamespacesDropdown
-          {...props}
-          showAllNamespaces={boolean('showAllNamespaces', false)}
-        />
-      </Provider>
-    );
-  })
-  .add('empty', () => {
+    return <Provider store={store}>{storyFn()}</Provider>;
+  }
+];
+
+export const Empty = () => <NamespacesDropdown {...props} />;
+Empty.decorators = [
+  storyFn => {
     const store = mockStore({
       namespaces: {
         byName: {},
         isFetching: false
-      }
+      },
+      properties: {}
     });
-    return (
-      <Provider store={store}>
-        <NamespacesDropdown {...props} />
-      </Provider>
-    );
-  });
+    return <Provider store={store}>{storyFn()}</Provider>;
+  }
+];

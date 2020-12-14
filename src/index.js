@@ -14,19 +14,23 @@ limitations under the License.
 import React from 'react';
 import ReactDOM from 'react-dom';
 import { Provider } from 'react-redux';
+import ReconnectingWebSocket from 'reconnecting-websocket';
 
 import './utils/polyfills';
 import { configureStore } from './store';
 import { getWebSocketURL } from './api';
+import { setLocale } from './actions/locale';
 
 import App from './containers/App';
 
-const webSocket = new WebSocket(getWebSocketURL());
+const webSocket = new ReconnectingWebSocket(getWebSocketURL());
 function closeSocket() {
   webSocket.close();
 }
 
 const store = configureStore({ webSocket });
+
+store.dispatch(setLocale(navigator.language));
 
 ReactDOM.render(
   <Provider store={store}>

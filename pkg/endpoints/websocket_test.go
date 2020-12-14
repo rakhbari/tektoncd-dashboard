@@ -23,6 +23,8 @@ import (
 	"testing"
 	"time"
 
+	"strconv"
+
 	gorillaSocket "github.com/gorilla/websocket"
 	"github.com/tektoncd/dashboard/pkg/broadcaster"
 	. "github.com/tektoncd/dashboard/pkg/endpoints"
@@ -30,10 +32,10 @@ import (
 	"github.com/tektoncd/dashboard/pkg/testutils"
 	"github.com/tektoncd/dashboard/pkg/websocket"
 	v1alpha1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1alpha1"
+	v1beta1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"strconv"
 )
 
 type informerRecord struct {
@@ -107,7 +109,7 @@ func TestWebsocketResources(t *testing.T) {
 	taskRecord := NewInformerRecord(getKind(string(broadcaster.TaskCreated)), true)
 	clusterTaskRecord := NewInformerRecord(getKind(string(broadcaster.ClusterTaskCreated)), true)
 	taskRunRecord := NewInformerRecord(getKind(string(broadcaster.TaskRunCreated)), true)
-	extensionRecord := NewInformerRecord(getKind(string(broadcaster.ExtensionCreated)), true)
+	extensionRecord := NewInformerRecord(getKind(string(broadcaster.ServiceExtensionCreated)), true)
 	secretRecord := NewInformerRecord(getKind(string(broadcaster.SecretCreated)), true)
 	// CD records
 	namespaceRecord := NewInformerRecord(getKind(string(broadcaster.NamespaceCreated)), false)
@@ -259,7 +261,7 @@ func CUDPipelineResources(r *Resource, t *testing.T, namespace string) {
 	}
 
 	t.Log("Creating pipelineresource")
-	_, err := r.PipelineClient.TektonV1alpha1().PipelineResources(namespace).Create(&pipelineResource)
+	_, err := r.PipelineResourceClient.TektonV1alpha1().PipelineResources(namespace).Create(&pipelineResource)
 	if err != nil {
 		t.Fatalf("Error creating pipelineresource: %s: %s\n", pipelineResource.Name, err.Error())
 	}
@@ -267,13 +269,13 @@ func CUDPipelineResources(r *Resource, t *testing.T, namespace string) {
 	newVersion := "2"
 	pipelineResource.ResourceVersion = newVersion
 	t.Log("Updating pipelineresource")
-	_, err = r.PipelineClient.TektonV1alpha1().PipelineResources(namespace).Update(&pipelineResource)
+	_, err = r.PipelineResourceClient.TektonV1alpha1().PipelineResources(namespace).Update(&pipelineResource)
 	if err != nil {
 		t.Fatalf("Error updating pipelineresource: %s: %s\n", pipelineResource.Name, err.Error())
 	}
 
 	t.Log("Deleting pipelineresource")
-	err = r.PipelineClient.TektonV1alpha1().PipelineResources(namespace).Delete(pipelineResource.Name, &metav1.DeleteOptions{})
+	err = r.PipelineResourceClient.TektonV1alpha1().PipelineResources(namespace).Delete(pipelineResource.Name, &metav1.DeleteOptions{})
 	if err != nil {
 		t.Fatalf("Error deleting pipelineresource: %s: %s\n", pipelineResource.Name, err.Error())
 	}
@@ -282,7 +284,7 @@ func CUDPipelineResources(r *Resource, t *testing.T, namespace string) {
 func CUDPipelines(r *Resource, t *testing.T, namespace string) {
 	resourceVersion := "1"
 
-	pipeline := v1alpha1.Pipeline{
+	pipeline := v1beta1.Pipeline{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            "pipeline",
 			ResourceVersion: resourceVersion,
@@ -290,7 +292,7 @@ func CUDPipelines(r *Resource, t *testing.T, namespace string) {
 	}
 
 	t.Log("Creating pipeline")
-	_, err := r.PipelineClient.TektonV1alpha1().Pipelines(namespace).Create(&pipeline)
+	_, err := r.PipelineClient.TektonV1beta1().Pipelines(namespace).Create(&pipeline)
 	if err != nil {
 		t.Fatalf("Error creating pipeline: %s: %s\n", pipeline.Name, err.Error())
 	}
@@ -298,13 +300,13 @@ func CUDPipelines(r *Resource, t *testing.T, namespace string) {
 	newVersion := "2"
 	pipeline.ResourceVersion = newVersion
 	t.Log("Updating pipeline")
-	_, err = r.PipelineClient.TektonV1alpha1().Pipelines(namespace).Update(&pipeline)
+	_, err = r.PipelineClient.TektonV1beta1().Pipelines(namespace).Update(&pipeline)
 	if err != nil {
 		t.Fatalf("Error updating pipeline: %s: %s\n", pipeline.Name, err.Error())
 	}
 
 	t.Log("Deleting pipeline")
-	err = r.PipelineClient.TektonV1alpha1().Pipelines(namespace).Delete(pipeline.Name, &metav1.DeleteOptions{})
+	err = r.PipelineClient.TektonV1beta1().Pipelines(namespace).Delete(pipeline.Name, &metav1.DeleteOptions{})
 	if err != nil {
 		t.Fatalf("Error deleting pipeline: %s: %s\n", pipeline.Name, err.Error())
 	}
@@ -313,7 +315,7 @@ func CUDPipelines(r *Resource, t *testing.T, namespace string) {
 func CUDPipelineRuns(r *Resource, t *testing.T, namespace string) {
 	resourceVersion := "1"
 
-	pipelineRun := v1alpha1.PipelineRun{
+	pipelineRun := v1beta1.PipelineRun{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            "pipelineRun",
 			ResourceVersion: resourceVersion,
@@ -321,7 +323,7 @@ func CUDPipelineRuns(r *Resource, t *testing.T, namespace string) {
 	}
 
 	t.Log("Creating pipelineRun")
-	_, err := r.PipelineClient.TektonV1alpha1().PipelineRuns(namespace).Create(&pipelineRun)
+	_, err := r.PipelineClient.TektonV1beta1().PipelineRuns(namespace).Create(&pipelineRun)
 	if err != nil {
 		t.Fatalf("Error creating pipelineRun: %s: %s\n", pipelineRun.Name, err.Error())
 	}
@@ -329,13 +331,13 @@ func CUDPipelineRuns(r *Resource, t *testing.T, namespace string) {
 	newVersion := "2"
 	pipelineRun.ResourceVersion = newVersion
 	t.Log("Updating pipelineRun")
-	_, err = r.PipelineClient.TektonV1alpha1().PipelineRuns(namespace).Update(&pipelineRun)
+	_, err = r.PipelineClient.TektonV1beta1().PipelineRuns(namespace).Update(&pipelineRun)
 	if err != nil {
 		t.Fatalf("Error updating pipelineRun: %s: %s\n", pipelineRun.Name, err.Error())
 	}
 
 	t.Log("Deleting pipelineRun")
-	err = r.PipelineClient.TektonV1alpha1().PipelineRuns(namespace).Delete(pipelineRun.Name, &metav1.DeleteOptions{})
+	err = r.PipelineClient.TektonV1beta1().PipelineRuns(namespace).Delete(pipelineRun.Name, &metav1.DeleteOptions{})
 	if err != nil {
 		t.Fatalf("Error deleting pipelineRun: %s: %s\n", pipelineRun.Name, err.Error())
 	}
@@ -344,7 +346,7 @@ func CUDPipelineRuns(r *Resource, t *testing.T, namespace string) {
 func CUDTasks(r *Resource, t *testing.T, namespace string) {
 	resourceVersion := "1"
 
-	task := v1alpha1.Task{
+	task := v1beta1.Task{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            "task",
 			ResourceVersion: resourceVersion,
@@ -352,7 +354,7 @@ func CUDTasks(r *Resource, t *testing.T, namespace string) {
 	}
 
 	t.Log("Creating task")
-	_, err := r.PipelineClient.TektonV1alpha1().Tasks(namespace).Create(&task)
+	_, err := r.PipelineClient.TektonV1beta1().Tasks(namespace).Create(&task)
 	if err != nil {
 		t.Fatalf("Error creating task: %s: %s\n", task.Name, err.Error())
 	}
@@ -360,13 +362,13 @@ func CUDTasks(r *Resource, t *testing.T, namespace string) {
 	newVersion := "2"
 	task.ResourceVersion = newVersion
 	t.Log("Updating task")
-	_, err = r.PipelineClient.TektonV1alpha1().Tasks(namespace).Update(&task)
+	_, err = r.PipelineClient.TektonV1beta1().Tasks(namespace).Update(&task)
 	if err != nil {
 		t.Fatalf("Error updating task: %s: %s\n", task.Name, err.Error())
 	}
 
 	t.Log("Deleting task")
-	err = r.PipelineClient.TektonV1alpha1().Tasks(namespace).Delete(task.Name, &metav1.DeleteOptions{})
+	err = r.PipelineClient.TektonV1beta1().Tasks(namespace).Delete(task.Name, &metav1.DeleteOptions{})
 	if err != nil {
 		t.Fatalf("Error deleting task: %s: %s\n", task.Name, err.Error())
 	}
@@ -375,7 +377,7 @@ func CUDTasks(r *Resource, t *testing.T, namespace string) {
 func CUDClusterTasks(r *Resource, t *testing.T) {
 	resourceVersion := "1"
 
-	clusterTask := v1alpha1.ClusterTask{
+	clusterTask := v1beta1.ClusterTask{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            "clusterTask",
 			ResourceVersion: resourceVersion,
@@ -383,7 +385,7 @@ func CUDClusterTasks(r *Resource, t *testing.T) {
 	}
 
 	t.Log("Creating clusterTask")
-	_, err := r.PipelineClient.TektonV1alpha1().ClusterTasks().Create(&clusterTask)
+	_, err := r.PipelineClient.TektonV1beta1().ClusterTasks().Create(&clusterTask)
 	if err != nil {
 		t.Fatalf("Error creating clusterTask: %s: %s\n", clusterTask.Name, err.Error())
 	}
@@ -391,13 +393,13 @@ func CUDClusterTasks(r *Resource, t *testing.T) {
 	newVersion := "2"
 	clusterTask.ResourceVersion = newVersion
 	t.Log("Updating clusterTask")
-	_, err = r.PipelineClient.TektonV1alpha1().ClusterTasks().Update(&clusterTask)
+	_, err = r.PipelineClient.TektonV1beta1().ClusterTasks().Update(&clusterTask)
 	if err != nil {
 		t.Fatalf("Error updating clusterTask: %s: %s\n", clusterTask.Name, err.Error())
 	}
 
 	t.Log("Deleting clusterTask")
-	err = r.PipelineClient.TektonV1alpha1().ClusterTasks().Delete(clusterTask.Name, &metav1.DeleteOptions{})
+	err = r.PipelineClient.TektonV1beta1().ClusterTasks().Delete(clusterTask.Name, &metav1.DeleteOptions{})
 	if err != nil {
 		t.Fatalf("Error deleting clusterTask: %s: %s\n", clusterTask.Name, err.Error())
 	}
@@ -406,7 +408,7 @@ func CUDClusterTasks(r *Resource, t *testing.T) {
 func CUDTaskRuns(r *Resource, t *testing.T, namespace string) {
 	resourceVersion := "1"
 
-	taskRun := v1alpha1.TaskRun{
+	taskRun := v1beta1.TaskRun{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            "taskRun",
 			ResourceVersion: resourceVersion,
@@ -414,7 +416,7 @@ func CUDTaskRuns(r *Resource, t *testing.T, namespace string) {
 	}
 
 	t.Log("Creating taskRun")
-	_, err := r.PipelineClient.TektonV1alpha1().TaskRuns(namespace).Create(&taskRun)
+	_, err := r.PipelineClient.TektonV1beta1().TaskRuns(namespace).Create(&taskRun)
 	if err != nil {
 		t.Fatalf("Error creating taskRun: %s: %s\n", taskRun.Name, err.Error())
 	}
@@ -422,13 +424,13 @@ func CUDTaskRuns(r *Resource, t *testing.T, namespace string) {
 	newVersion := "2"
 	taskRun.ResourceVersion = newVersion
 	t.Log("Updating taskRun")
-	_, err = r.PipelineClient.TektonV1alpha1().TaskRuns(namespace).Update(&taskRun)
+	_, err = r.PipelineClient.TektonV1beta1().TaskRuns(namespace).Update(&taskRun)
 	if err != nil {
 		t.Fatalf("Error updating taskRun: %s: %s\n", taskRun.Name, err.Error())
 	}
 
 	t.Log("Deleting taskRun")
-	err = r.PipelineClient.TektonV1alpha1().TaskRuns(namespace).Delete(taskRun.Name, &metav1.DeleteOptions{})
+	err = r.PipelineClient.TektonV1beta1().TaskRuns(namespace).Delete(taskRun.Name, &metav1.DeleteOptions{})
 	if err != nil {
 		t.Fatalf("Error deleting taskRun: %s: %s\n", taskRun.Name, err.Error())
 	}

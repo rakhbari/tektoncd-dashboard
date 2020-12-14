@@ -1,5 +1,5 @@
 /*
-Copyright 2019 The Tekton Authors
+Copyright 2019-2020 The Tekton Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -12,10 +12,13 @@ limitations under the License.
 */
 
 module.exports = {
+  clearMocks: true,
   collectCoverage: true,
   collectCoverageFrom: [
     '<rootDir>/src/**/*.js',
-    '!<rootDir>/src/**/*.stories.js'
+    '<rootDir>/packages/**/src/**/*.js',
+    '!<rootDir>/src/**/*.stories.js',
+    '!<rootDir>/packages/**/src/**/*.stories.js'
   ],
   coverageReporters: ['html', 'text'],
   coverageThreshold: {
@@ -31,7 +34,10 @@ module.exports = {
       '<rootDir>/config_frontend/__mocks__/fileMock.js',
     '\\.(css|scss)$': '<rootDir>/config_frontend/__mocks__/styleMock.js'
   },
+  restoreMocks: true,
   setupFilesAfterEnv: ['<rootDir>/config_frontend/setupTests.js'],
-  testMatch: ['<rootDir>/src/**/*.test.js'],
-  testPathIgnorePatterns: ['node_modules']
+  testMatch: [
+    '<rootDir>/src/**/*.test.js',
+    '<rootDir>/packages/**/src/**/*.test.js'
+  ]
 };

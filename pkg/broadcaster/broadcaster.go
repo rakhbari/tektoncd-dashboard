@@ -1,5 +1,5 @@
 /*
-Copyright 2019 The Tekton Authors
+Copyright 2019-2020 The Tekton Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -18,41 +18,63 @@ import (
 	"sync"
 )
 
-type messageType string
+type MessageType string
 
 // Reference outside of package
 const (
-	Log                     messageType = "Log"
-	NamespaceCreated        messageType = "NamespaceCreated"
-	NamespaceDeleted        messageType = "NamespaceDeleted"
-	PipelineCreated         messageType = "PipelineCreated"
-	PipelineDeleted         messageType = "PipelineDeleted"
-	PipelineUpdated         messageType = "PipelineUpdated"
-	ClusterTaskCreated      messageType = "ClusterTaskCreated"
-	ClusterTaskDeleted      messageType = "ClusterTaskDeleted"
-	ClusterTaskUpdated      messageType = "ClusterTaskUpdated"
-	TaskCreated             messageType = "TaskCreated"
-	TaskDeleted             messageType = "TaskDeleted"
-	TaskUpdated             messageType = "TaskUpdated"
-	PipelineResourceCreated messageType = "PipelineResourceCreated"
-	PipelineResourceDeleted messageType = "PipelineResourceDeleted"
-	PipelineResourceUpdated messageType = "PipelineResourceUpdated"
-	PipelineRunCreated      messageType = "PipelineRunCreated"
-	PipelineRunDeleted      messageType = "PipelineRunDeleted"
-	PipelineRunUpdated      messageType = "PipelineRunUpdated"
-	TaskRunCreated          messageType = "TaskRunCreated"
-	TaskRunDeleted          messageType = "TaskRunDeleted"
-	TaskRunUpdated          messageType = "TaskRunUpdated"
-	ExtensionCreated        messageType = "ExtensionCreated"
-	ExtensionUpdated        messageType = "ExtensionUpdated"
-	ExtensionDeleted        messageType = "ExtensionDeleted"
-	SecretCreated           messageType = "SecretCreated"
-	SecretDeleted           messageType = "SecretDeleted"
-	SecretUpdated           messageType = "SecretUpdated"
+	Log                          MessageType = "Log"
+	NamespaceCreated             MessageType = "NamespaceCreated"
+	NamespaceUpdated             MessageType = "NamespaceUpdated"
+	NamespaceDeleted             MessageType = "NamespaceDeleted"
+	PipelineCreated              MessageType = "PipelineCreated"
+	PipelineDeleted              MessageType = "PipelineDeleted"
+	PipelineUpdated              MessageType = "PipelineUpdated"
+	ClusterTaskCreated           MessageType = "ClusterTaskCreated"
+	ClusterTaskDeleted           MessageType = "ClusterTaskDeleted"
+	ClusterTaskUpdated           MessageType = "ClusterTaskUpdated"
+	TaskCreated                  MessageType = "TaskCreated"
+	TaskDeleted                  MessageType = "TaskDeleted"
+	TaskUpdated                  MessageType = "TaskUpdated"
+	PipelineResourceCreated      MessageType = "PipelineResourceCreated"
+	PipelineResourceDeleted      MessageType = "PipelineResourceDeleted"
+	PipelineResourceUpdated      MessageType = "PipelineResourceUpdated"
+	PipelineRunCreated           MessageType = "PipelineRunCreated"
+	PipelineRunDeleted           MessageType = "PipelineRunDeleted"
+	PipelineRunUpdated           MessageType = "PipelineRunUpdated"
+	TaskRunCreated               MessageType = "TaskRunCreated"
+	TaskRunDeleted               MessageType = "TaskRunDeleted"
+	TaskRunUpdated               MessageType = "TaskRunUpdated"
+	ConditionCreated             MessageType = "ConditionCreated"
+	ConditionDeleted             MessageType = "ConditionDeleted"
+	ConditionUpdated             MessageType = "ConditionUpdated"
+	ResourceExtensionCreated     MessageType = "ResourceExtensionCreated"
+	ResourceExtensionUpdated     MessageType = "ResourceExtensionUpdated"
+	ResourceExtensionDeleted     MessageType = "ResourceExtensionDeleted"
+	ServiceExtensionCreated      MessageType = "ServiceExtensionCreated"
+	ServiceExtensionUpdated      MessageType = "ServiceExtensionUpdated"
+	ServiceExtensionDeleted      MessageType = "ServiceExtensionDeleted"
+	SecretCreated                MessageType = "SecretCreated"
+	SecretDeleted                MessageType = "SecretDeleted"
+	SecretUpdated                MessageType = "SecretUpdated"
+	ServiceAccountCreated        MessageType = "ServiceAccountCreated"
+	ServiceAccountDeleted        MessageType = "ServiceAccountDeleted"
+	ServiceAccountUpdated        MessageType = "ServiceAccountUpdated"
+	TriggerBindingCreated        MessageType = "TriggerBindingCreated"
+	TriggerBindingDeleted        MessageType = "TriggerBindingDeleted"
+	TriggerBindingUpdated        MessageType = "TriggerBindingUpdated"
+	ClusterTriggerBindingCreated MessageType = "ClusterTriggerBindingCreated"
+	ClusterTriggerBindingDeleted MessageType = "ClusterTriggerBindingDeleted"
+	ClusterTriggerBindingUpdated MessageType = "ClusterTriggerBindingUpdated"
+	TriggerTemplateCreated       MessageType = "TriggerTemplateCreated"
+	TriggerTemplateDeleted       MessageType = "TriggerTemplateDeleted"
+	TriggerTemplateUpdated       MessageType = "TriggerTemplateUpdated"
+	EventListenerCreated         MessageType = "EventListenerCreated"
+	EventListenerDeleted         MessageType = "EventListenerDeleted"
+	EventListenerUpdated         MessageType = "EventListenerUpdated"
 )
 
 type SocketData struct {
-	MessageType messageType
+	MessageType MessageType
 	Payload     interface{}
 }
 

@@ -1,0 +1,94 @@
+/*
+Copyright 2019-2020 The Tekton Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+@import '~carbon-components/scss/globals/scss/vars';
+
+header.tkn--step-details-header {
+  padding: 1rem 1rem 0;
+
+  h2.tkn--details-header--heading {
+    height: 1.7rem;
+    font-size: 1.3rem;
+    font-weight: 400;
+    display: flex;
+    line-height: 1.5rem;
+    align-items: baseline;
+
+    svg {
+      flex-shrink: 0;
+      align-self: normal;
+    }
+
+    .tkn--run-details-name {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    > .skeleton-placeholder {
+      height: 100%;
+      width: 12rem;
+    }
+
+    > .tkn--status-icon {
+      vertical-align: top;
+      margin-right: 0.75rem;
+      width: 24px;
+      height: 24px;
+
+      &.tkn--spinner {
+        position: relative;
+        top: -1px;
+        left: -1px;
+      }
+    }
+
+    > .tkn--status-label {
+      font-size: 0.9rem;
+      margin-left: 0.75rem;
+    }
+  }
+
+  .tkn--run-details-time {
+    display: inline-block;
+    margin: 0.5rem 0 0.5rem 2.25rem;
+    font-size: 0.75rem;
+  }
+
+  &[data-status] {
+    .tkn--status-label {
+      color: $gray-70;
+    }
+  }
+  &[data-status='running'] {
+    .tkn--status-label {
+      color: $support-04;
+    }
+  }
+  &[data-status='terminated'][data-reason='Completed'],
+  &[data-status='True'] {
+    .tkn--status-label {
+      color: $support-02;
+    }
+  }
+  &[data-status='terminated'][data-reason='Error'],
+  &[data-status='False'],
+  &[data-status='cancelled'],
+  &[data-reason='PipelineRunCancelled'],
+  &[data-reason='TaskRunCancelled'],
+  &[data-reason='TaskRunTimeout'] {
+    .tkn--status-label {
+      color: $support-01;
+    }
+  }
+}

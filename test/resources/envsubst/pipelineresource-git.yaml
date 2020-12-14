@@ -1,0 +1,13 @@
+---
+apiVersion: tekton.dev/v1alpha1
+kind: PipelineResource
+metadata:
+  name: ${GIT_RESOURCE_NAME}
+  namespace: ${TEST_NAMESPACE}
+spec:
+  type: git
+  params:
+    - name: url
+      value: ${REPO_URL}
+    - name: revision
+      value: ${GIT_COMMIT}

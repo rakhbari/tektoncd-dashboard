@@ -1,5 +1,5 @@
 /*
-Copyright 2019 The Tekton Authors
+Copyright 2019-2020 The Tekton Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -12,306 +12,49 @@ limitations under the License.
 */
 
 import fetchMock from 'fetch-mock';
+import { labels } from '@tektoncd/dashboard-utils';
 
-import {
-  cancelPipelineRun,
-  cancelTaskRun,
-  checkData,
-  createCredential,
-  createPipelineRun,
-  createPipelineRunAtProxy,
-  deleteCredential,
-  getAPI,
-  getAPIRoot,
-  getClusterTask,
-  getClusterTasks,
-  getCredential,
-  getCredentials,
-  getExtensionBundleURL,
-  getExtensions,
-  getNamespaces,
-  getPipeline,
-  getPipelineResource,
-  getPipelineResources,
-  getPipelineRun,
-  getPipelineRuns,
-  getPipelines,
-  getPodLog,
-  getServiceAccounts,
-  getTask,
-  getTaskRun,
-  getTaskRuns,
-  getTasks,
-  getTektonAPI,
-  updateCredential
-} from '.';
+import * as API from '.';
+import { mockCSRFToken } from '../utils/test';
 
-beforeEach(jest.resetAllMocks);
-
-describe('getAPIRoot', () => {
-  it('handles base URL with trailing slash', () => {
-    window.history.pushState({}, 'Title', '/path/#hash');
-    expect(getAPIRoot()).toContain('/path');
-  });
-
-  it('handles base URL without trailing slash', () => {
-    window.history.pushState({}, 'Title', '/path#hash');
-    expect(getAPIRoot()).toContain('/path');
-  });
-});
-
-describe('getAPI', () => {
-  it('returns a URI containing the given type', () => {
-    const uri = getAPI('pipelines');
-    expect(uri).toContain('pipelines');
-  });
-
-  it('returns a URI containing the given type and name', () => {
-    const uri = getAPI('pipelines', { name: 'somename' });
-    expect(uri).toContain('pipelines');
-    expect(uri).toContain('somename');
-  });
-
-  it('returns a URI containing the given type, name, and namespace', () => {
-    const uri = getAPI('pipelines', {
-      name: 'somename',
-      namespace: 'customnamespace'
-    });
-    expect(uri).toContain('pipelines');
-    expect(uri).toContain('somename');
-    expect(uri).toContain('customnamespace');
-  });
-});
-
-describe('getTektonAPI', () => {
-  it('returns a URI containing the given type', () => {
-    const uri = getTektonAPI('pipelines');
-    expect(uri).toContain('pipelines');
-  });
-
-  it('returns a URI containing the given type and name', () => {
-    const uri = getTektonAPI('pipelines', { name: 'somename' });
-    expect(uri).toContain('pipelines');
-    expect(uri).toContain('somename');
-  });
-
-  it('returns a URI containing the given type, name, and namespace', () => {
-    const uri = getTektonAPI('pipelines', {
-      name: 'somename',
-      namespace: 'customnamespace'
-    });
-    expect(uri).toContain('pipelines');
-    expect(uri).toContain('somename');
-    expect(uri).toContain('namespaces');
-    expect(uri).toContain('customnamespace');
-  });
-
-  it('returns a URI without namespace when omitted', () => {
-    const uri = getTektonAPI('clustertasks', {
-      name: 'somename'
-    });
-    expect(uri).toContain('clustertasks');
-    expect(uri).toContain('somename');
-    expect(uri).not.toContain('namespaces');
-  });
-});
-
-describe('checkData', () => {
-  it('returns items if present', () => {
-    const items = 'foo';
-    const data = {
-      items
-    };
-    expect(checkData(data)).toEqual(items);
-  });
-
-  it('throws an error if items is not present', () => {
-    expect(() => checkData({})).toThrow();
-  });
-});
-
-it('getPipelines', () => {
-  const data = {
-    items: 'pipelines'
-  };
-  fetchMock.get(/pipelines/, data);
-  return getPipelines().then(pipelines => {
-    expect(pipelines).toEqual(data.items);
-    fetchMock.restore();
-  });
-});
-
-it('getPipeline', () => {
-  const name = 'foo';
-  const data = { fake: 'pipeline' };
+it('getCustomResource', () => {
+  const group = 'testgroup';
+  const version = 'testversion';
+  const type = 'testtype';
+  const name = 'testresource';
+  const namespace = 'testnamespace';
+  const data = { fake: 'resourcedata' };
   fetchMock.get(`end:${name}`, data);
-  return getPipeline({ name }).then(pipeline => {
-    expect(pipeline).toEqual(data);
-    fetchMock.restore();
-  });
+  return API.getCustomResource({ group, version, type, namespace, name }).then(
+    resource => {
+      expect(resource).toEqual(data);
+      fetchMock.restore();
+    }
+  );
 });
 
-it('getPipelineRuns', () => {
+it('getCustomResources', () => {
+  const group = 'testgroup';
+  const version = 'testversion';
+  const type = 'testtype';
+  const namespace = 'testnamespace';
+  const data = { items: 'resourcedata' };
+  fetchMock.get(`end:${type}/`, data);
+  return API.getCustomResources({ group, version, type, namespace }).then(
+    resources => {
+      expect(resources).toEqual(data.items);
+      fetchMock.restore();
+    }
+  );
+});
+
+it('getNamespaces returns the correct data', () => {
   const data = {
-    items: 'pipelineRuns'
+    items: 'namespaces'
   };
-  fetchMock.get(/pipelineruns/, data);
-  return getPipelineRuns().then(pipelineRuns => {
-    expect(pipelineRuns).toEqual(data.items);
-    fetchMock.restore();
-  });
-});
-
-it('getPipelineRuns With Query Params', () => {
-  const pipelineName = 'pipelineName';
-  const data = {
-    items: 'pipelineRuns'
-  };
-  fetchMock.get(/pipelineruns/, data);
-  return getPipelineRuns({ pipelineName }).then(pipelineRuns => {
-    expect(pipelineRuns).toEqual(data.items);
-    fetchMock.restore();
-  });
-});
-
-it('getPipelineRun', () => {
-  const name = 'foo';
-  const data = { fake: 'pipelineRun' };
-  fetchMock.get(`end:${name}`, data);
-  return getPipelineRun({ name }).then(pipelineRun => {
-    expect(pipelineRun).toEqual(data);
-    fetchMock.restore();
-  });
-});
-
-it('cancelPipelineRun', () => {
-  const name = 'foo';
-  const namespace = 'foospace';
-  const data = { fake: 'pipelineRun', spec: { status: 'running' } };
-  fetchMock.get(/pipelineruns/, Promise.resolve(data));
-  const payload = {
-    fake: 'pipelineRun',
-    spec: { status: 'PipelineRunCancelled' }
-  };
-  fetchMock.put(`end:${name}`, 204);
-  return cancelPipelineRun({ name, namespace }).then(() => {
-    expect(fetchMock.lastOptions()).toMatchObject({
-      body: JSON.stringify(payload)
-    });
-    fetchMock.restore();
-  });
-});
-
-it('cancelTaskRun', () => {
-  const name = 'foo';
-  const namespace = 'foospace';
-  const data = { fake: 'taskRun', spec: { status: 'running' } };
-  fetchMock.get(/taskruns/, Promise.resolve(data));
-  const payload = {
-    fake: 'taskRun',
-    spec: { status: 'TaskRunCancelled' }
-  };
-  fetchMock.put(`end:${name}`, 204);
-  return cancelTaskRun({ name, namespace }).then(() => {
-    expect(fetchMock.lastOptions()).toMatchObject({
-      body: JSON.stringify(payload)
-    });
-    fetchMock.restore();
-  });
-});
-
-it('getClusterTasks', () => {
-  const data = {
-    items: 'clustertasks'
-  };
-  fetchMock.get(/clustertasks/, data);
-  return getClusterTasks().then(tasks => {
-    expect(tasks).toEqual(data.items);
-    fetchMock.restore();
-  });
-});
-
-it('getClusterTask', () => {
-  const name = 'foo';
-  const data = { fake: 'clustertask' };
-  fetchMock.get(`end:${name}`, data);
-  return getClusterTask({ name }).then(task => {
-    expect(task).toEqual(data);
-    fetchMock.restore();
-  });
-});
-
-it('getTasks', () => {
-  const data = {
-    items: 'tasks'
-  };
-  fetchMock.get(/tasks/, data);
-  return getTasks().then(tasks => {
-    expect(tasks).toEqual(data.items);
-    fetchMock.restore();
-  });
-});
-
-it('getTask', () => {
-  const name = 'foo';
-  const data = { fake: 'task' };
-  fetchMock.get(`end:${name}`, data);
-  return getTask({ name }).then(task => {
-    expect(task).toEqual(data);
-    fetchMock.restore();
-  });
-});
-
-it('getTaskRuns', () => {
-  const data = {
-    items: 'taskRuns'
-  };
-  fetchMock.get(/taskruns/, data);
-  return getTaskRuns().then(taskRuns => {
-    expect(taskRuns).toEqual(data.items);
-    fetchMock.restore();
-  });
-});
-
-it('getTaskRuns With Query Params', () => {
-  const taskName = 'taskName';
-  const data = {
-    items: 'taskRuns'
-  };
-  fetchMock.get(/taskruns/, data);
-  return getTaskRuns({ taskName }).then(taskRuns => {
-    expect(taskRuns).toEqual(data.items);
-    fetchMock.restore();
-  });
-});
-
-it('getTaskRun', () => {
-  const name = 'foo';
-  const data = { fake: 'taskRun' };
-  fetchMock.get(`end:${name}`, data);
-  return getTaskRun({ name }).then(taskRun => {
-    expect(taskRun).toEqual(data);
-    fetchMock.restore();
-  });
-});
-
-it('getPipelineResources', () => {
-  const data = {
-    items: 'pipelineResources'
-  };
-  fetchMock.get(/pipelineresources/, data);
-  return getPipelineResources().then(pipelineResources => {
-    expect(pipelineResources).toEqual(data.items);
-    fetchMock.restore();
-  });
-});
-
-it('getPipelineResource', () => {
-  const name = 'foo';
-  const data = { fake: 'pipelineResource' };
-  fetchMock.get(`end:${name}`, data);
-  return getPipelineResource({ name }).then(pipelineResource => {
-    expect(pipelineResource).toEqual(data);
+  fetchMock.get(/namespaces/, data);
+  return API.getNamespaces().then(response => {
+    expect(response).toEqual(data.items);
     fetchMock.restore();
   });
 });
@@ -328,7 +71,7 @@ it('getPodLog', () => {
   fetchMock.get(`end:${name}/log`, responseConfig, {
     sendAsJson: false
   });
-  return getPodLog({ name, namespace }).then(log => {
+  return API.getPodLog({ name, namespace }).then(log => {
     expect(log).toEqual(data);
     fetchMock.restore();
   });
@@ -347,172 +90,193 @@ it('getPodLog with container name', () => {
   fetchMock.get(`end:${name}/log?container=${container}`, responseConfig, {
     sendAsJson: false
   });
-  return getPodLog({ container, name, namespace }).then(log => {
+  return API.getPodLog({ container, name, namespace }).then(log => {
     expect(log).toEqual(data);
     fetchMock.restore();
   });
 });
 
-it('createPipelineRun', () => {
-  const payload = { fake: 'payload' };
-  const data = { fake: 'data' };
-  fetchMock.post('*', data);
-  return createPipelineRun({ payload }).then(response => {
-    expect(response).toEqual(data);
-    expect(fetchMock.lastOptions()).toMatchObject({
-      body: JSON.stringify(payload)
-    });
-    fetchMock.restore();
-  });
-});
-
-it('createPipelineRunAtProxy', () => {
+it('importResources', () => {
   const mockDateNow = jest
     .spyOn(Date, 'now')
     .mockImplementation(() => 'fake-timestamp');
-  const pipelineName = 'fake-pipelineName';
-  const resources = { 'fake-resource-name': 'fake-resource-value' };
-  const params = { 'fake-param-name': 'fake-param-value' };
+  const repositoryURL = 'https://github.com/test/testing';
+  const path = 'fake-directory';
+  const namespace = 'fake-namespace';
   const serviceAccount = 'fake-serviceAccount';
-  const timeout = 'fake-timeout';
-  const payload = { pipelineName, resources, params, serviceAccount, timeout };
+  const importerNamespace = 'fake-importer-namespace';
+  const method = 'apply';
+
+  const payload = {
+    importerNamespace,
+    method,
+    namespace,
+    path,
+    repositoryURL,
+    serviceAccount
+  };
   const data = {
-    apiVersion: 'tekton.dev/v1alpha1',
+    apiVersion: 'tekton.dev/v1beta1',
     kind: 'PipelineRun',
     metadata: {
-      name: `${pipelineName}-run-${Date.now()}`
+      name: `import-resources-${Date.now()}`,
+      labels: {
+        app: 'tekton-app',
+        [labels.DASHBOARD_IMPORT]: 'true'
+      }
     },
     spec: {
-      pipelineRef: {
-        name: pipelineName
+      params: [
+        {
+          name: 'path',
+          value: 'fake-directory'
+        },
+        {
+          name: 'target-namespace',
+          value: 'fake-namespace'
+        }
+      ],
+      pipelineSpec: {
+        params: [
+          {
+            default: '.',
+            description: 'The path from which resources are to be imported',
+            name: 'path',
+            type: 'string'
+          },
+          {
+            default: 'tekton-pipelines',
+            description:
+              'The namespace in which to create the resources being imported',
+            name: 'target-namespace',
+            type: 'string'
+          }
+        ],
+        resources: [
+          {
+            name: 'git-source',
+            type: 'git'
+          }
+        ],
+        tasks: [
+          {
+            name: 'import-resources',
+            params: [
+              {
+                name: 'path',
+                value: '$(params.path)'
+              },
+              {
+                name: 'target-namespace',
+                value: '$(params.target-namespace)'
+              }
+            ],
+            resources: {
+              inputs: [
+                {
+                  name: 'git-source',
+                  resource: 'git-source'
+                }
+              ]
+            },
+            taskSpec: {
+              params: [
+                {
+                  default: '.',
+                  description:
+                    'The path from which resources are to be imported',
+                  name: 'path',
+                  type: 'string'
+                },
+                {
+                  default: 'tekton-pipelines',
+                  description:
+                    'The namespace in which to create the resources being imported',
+                  name: 'target-namespace',
+                  type: 'string'
+                }
+              ],
+              resources: {
+                inputs: [
+                  {
+                    name: 'git-source',
+                    type: 'git'
+                  }
+                ]
+              },
+              steps: [
+                {
+                  args: [
+                    method,
+                    '-f',
+                    '$(resources.inputs.git-source.path)/$(params.path)',
+                    '-n',
+                    '$(params.target-namespace)'
+                  ],
+                  command: ['kubectl'],
+                  image: 'lachlanevenson/k8s-kubectl:latest',
+                  name: 'import'
+                }
+              ]
+            }
+          }
+        ]
       },
-      resources: Object.keys(resources).map(name => ({
-        name,
-        resourceRef: { name: resources[name] }
-      })),
-      params: Object.keys(params).map(name => ({
-        name,
-        value: params[name]
-      })),
-      serviceAccount,
-      timeout
+      resources: [
+        {
+          name: 'git-source',
+          resourceSpec: {
+            params: [
+              {
+                name: 'url',
+                value: 'https://github.com/test/testing'
+              },
+              {
+                name: 'revision',
+                value: 'master'
+              }
+            ],
+            type: 'git'
+          }
+        }
+      ]
     }
   };
-  fetchMock.post('*', data);
-  return createPipelineRunAtProxy(payload).then(response => {
+
+  mockCSRFToken();
+  fetchMock.post('*', { body: data, status: 201 });
+  return API.importResources(payload).then(response => {
     expect(response).toEqual(data);
-    expect(fetchMock.lastOptions()).toMatchObject({
-      body: JSON.stringify(data)
-    });
+    expect(JSON.parse(fetchMock.lastOptions().body)).toMatchObject(data);
     fetchMock.restore();
     mockDateNow.mockRestore();
   });
 });
 
-it('getCredentials', () => {
-  const data = {
-    items: 'credentials'
-  };
-  fetchMock.get(/credentials/, data);
-  return getCredentials().then(credentials => {
-    expect(credentials).toEqual(data);
-    fetchMock.restore();
-  });
-});
-
-it('getCredential', () => {
-  const credentialId = 'foo';
-  const data = { fake: 'credential' };
-  fetchMock.get(`end:${credentialId}`, data);
-  return getCredential(credentialId).then(credential => {
-    expect(credential).toEqual(data);
-    fetchMock.restore();
-  });
-});
-
-it('createCredential', () => {
-  const id = 'id';
-  const username = 'username';
-  const password = 'password';
-  const type = 'type';
-  const payload = { id, username, password, type };
-  const data = { fake: 'data' };
-  fetchMock.post('*', data);
-  return createCredential(payload).then(response => {
-    expect(response).toEqual(data);
-    expect(fetchMock.lastOptions()).toMatchObject({
-      body: JSON.stringify(payload)
+describe('getAPIResource', () => {
+  it('handles non-core group', () => {
+    const group = 'testgroup';
+    const version = 'testversion';
+    const type = 'testtype';
+    const apiResource = { name: type };
+    const data = { resources: [apiResource] };
+    fetchMock.get(`end:/proxy/apis/${group}/${version}`, data);
+    return API.getAPIResource({ group, version, type }).then(resource => {
+      expect(resource).toEqual(apiResource);
+      fetchMock.restore();
     });
-    fetchMock.restore();
   });
-});
 
-it('updateCredential', () => {
-  const id = 'id';
-  const username = 'username';
-  const password = 'password';
-  const type = 'type';
-  const payload = { id, username, password, type };
-  const data = { fake: 'data' };
-  fetchMock.put('*', data);
-  return updateCredential(payload).then(response => {
-    expect(response).toEqual(data);
-    expect(fetchMock.lastOptions()).toMatchObject({
-      body: JSON.stringify(payload)
+  it('handles core group', () => {
+    const group = 'core';
+    const version = 'testversion';
+    const type = 'testtype';
+    const apiResource = { name: type };
+    const data = { resources: [apiResource] };
+    fetchMock.get(`end:/proxy/api/${version}`, data);
+    return API.getAPIResource({ group, version, type }).then(resource => {
+      expect(resource).toEqual(apiResource);
+      fetchMock.restore();
     });
-    fetchMock.restore();
-  });
-});
-
-it('deleteCredential', () => {
-  const credentialId = 'fake credential id';
-  const data = { fake: 'data' };
-  fetchMock.delete('*', data);
-  return deleteCredential(credentialId).then(response => {
-    expect(response).toEqual(data);
-    fetchMock.restore();
-  });
-});
-
-it('getExtensions', () => {
-  const displayName = 'displayName';
-  const name = 'name';
-  const bundlelocation = 'bundlelocation';
-  const source = getExtensionBundleURL(name, bundlelocation);
-  const url = 'url';
-  const extensions = [{ displayname: displayName, name, bundlelocation, url }];
-  const transformedExtensions = [{ displayName, name, source, url }];
-  fetchMock.get(/extensions/, extensions);
-  return getExtensions().then(response => {
-    expect(response).toEqual(transformedExtensions);
-    fetchMock.restore();
-  });
-});
-
-it('getExtensions null', () => {
-  fetchMock.get(/extensions/, 'null');
-  return getExtensions().then(response => {
-    expect(response).toEqual([]);
-    fetchMock.restore();
-  });
-});
-
-it('getNamespaces', () => {
-  const data = {
-    items: 'namespaces'
-  };
-  fetchMock.get(/namespaces/, data);
-  return getNamespaces().then(response => {
-    expect(response).toEqual(data.items);
-    fetchMock.restore();
-  });
-});
-
-it('getServiceAccounts', () => {
-  const data = { items: 'serviceaccounts' };
-  fetchMock.get(/serviceaccounts/, data);
-  return getServiceAccounts().then(response => {
-    expect(response).toEqual(data.items);
-    fetchMock.restore();
   });
 });

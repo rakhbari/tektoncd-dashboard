@@ -1,5 +1,5 @@
 /*
-Copyright 2019 The Tekton Authors
+Copyright 2019-2020 The Tekton Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -12,7 +12,9 @@ limitations under the License.
 */
 
 import React from 'react';
-import { fireEvent, render } from 'react-testing-library';
+import { fireEvent } from '@testing-library/react';
+import { renderWithIntl } from '@tektoncd/dashboard-components/src/utils/test';
+
 import SecretsDeleteModal from './SecretsDeleteModal';
 
 it('SecretsDeleteModal renders with one passed secret', () => {
@@ -22,7 +24,7 @@ it('SecretsDeleteModal renders with one passed secret', () => {
     handleClick() {},
     handleDelete() {}
   };
-  const { queryByText } = render(<SecretsDeleteModal {...props} />);
+  const { queryByText } = renderWithIntl(<SecretsDeleteModal {...props} />);
   expect(queryByText('secret-name')).toBeTruthy();
   expect(queryByText('Cancel')).toBeTruthy();
   expect(queryByText('Delete')).toBeTruthy();
@@ -40,7 +42,7 @@ it('SecretsDeleteModal renders with multiple passed secrets', () => {
     handleClick() {},
     handleDelete() {}
   };
-  const { queryByText } = render(<SecretsDeleteModal {...props} />);
+  const { queryByText } = renderWithIntl(<SecretsDeleteModal {...props} />);
   expect(queryByText('secret-name')).toBeTruthy();
   expect(queryByText('other-secret')).toBeTruthy();
   expect(queryByText('another-one')).toBeTruthy();
@@ -59,10 +61,12 @@ it('Test SecretsDeleteModal click events', () => {
     handleDelete
   };
 
-  const { queryByText, rerender } = render(<SecretsDeleteModal {...props} />);
+  const { queryByText, rerender } = renderWithIntl(
+    <SecretsDeleteModal {...props} />
+  );
   fireEvent.click(queryByText('Delete'));
   expect(handleDelete).toHaveBeenCalledTimes(1);
-  rerender(<SecretsDeleteModal {...props} open={false} />);
+  renderWithIntl(<SecretsDeleteModal {...props} open={false} />, { rerender });
   fireEvent.click(queryByText('Delete'));
   expect(handleClick).toHaveBeenCalledTimes(0);
 });

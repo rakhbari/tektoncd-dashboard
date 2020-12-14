@@ -1,39 +1,36 @@
+/*
+Copyright 2019-2020 The Tekton Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+		http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package kubernetes
 
 import (
 	"github.com/tektoncd/dashboard/pkg/broadcaster"
-	"github.com/tektoncd/dashboard/pkg/endpoints"
-	logging "github.com/tektoncd/dashboard/pkg/logging"
-	v1 "k8s.io/api/core/v1"
+	"github.com/tektoncd/dashboard/pkg/controllers/utils"
+	"github.com/tektoncd/dashboard/pkg/logging"
 	k8sinformer "k8s.io/client-go/informers"
-	"k8s.io/client-go/tools/cache"
 )
 
+// NewNamespaceController registers the K8s shared informer that reacts to
+// create and delete events for namespaces
 func NewNamespaceController(sharedK8sInformerFactory k8sinformer.SharedInformerFactory) {
 	logging.Log.Debug("In NewNamespaceController")
-	k8sInformer := sharedK8sInformerFactory.Core().V1().Namespaces()
-	k8sInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    namespaceCreated,
-		DeleteFunc: namespaceDeleted,
-	})
-}
 
-func namespaceCreated(obj interface{}) {
-	logging.Log.Debugf("Namespace Controller detected namespace '%s' created", obj.(*v1.Namespace).Name)
-	data := broadcaster.SocketData{
-		MessageType: broadcaster.NamespaceCreated,
-		Payload:     obj,
-	}
-
-	endpoints.ResourcesChannel <- data
-}
-
-func namespaceDeleted(obj interface{}) {
-	logging.Log.Debugf("Namespace Controller detected namespace '%s' deleted", obj.(*v1.Namespace).Name)
-	data := broadcaster.SocketData{
-		MessageType: broadcaster.NamespaceDeleted,
-		Payload:     obj,
-	}
-
-	endpoints.ResourcesChannel <- data
+	utils.NewController(
+		"Namespace",
+		sharedK8sInformerFactory.Core().V1().Namespaces().Informer(),
+		broadcaster.NamespaceCreated,
+		broadcaster.NamespaceUpdated,
+		broadcaster.NamespaceDeleted,
+		nil,
+	)
 }

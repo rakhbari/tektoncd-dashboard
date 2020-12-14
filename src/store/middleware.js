@@ -11,8 +11,17 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+/* istanbul ignore next */
 export function createWebSocketMiddleware(socket) {
   return ({ dispatch }) => {
+    socket.addEventListener('close', () => {
+      dispatch({ type: 'WEBSOCKET_DISCONNECTED' });
+    });
+
+    socket.addEventListener('open', () => {
+      dispatch({ type: 'WEBSOCKET_CONNECTED' });
+    });
+
     socket.addEventListener('message', event => {
       if (event.type !== 'message') {
         return;

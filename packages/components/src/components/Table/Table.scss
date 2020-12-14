@@ -1,0 +1,160 @@
+/*
+Copyright 2019-2020 The Tekton Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+@import '~@tektoncd/dashboard-components/dist/scss/vars';
+
+.tkn--table {
+  // add space between adjacent tables
+  ~ .tkn--table {
+    margin-top: $spacing-05;
+  }
+
+  .bx--table-toolbar {
+    background: transparent;
+  }
+
+  .bx--data-table.bx--data-table--short td.bx--table-expand {
+    height: 2rem;
+  }
+
+  .bx--data-table-header {
+    padding-left: 0;
+    padding-bottom: $spacing-03;
+  }
+
+  .bx--data-table-container {
+    margin-top: 0;
+    width: 100%;
+  }
+
+  .bx--data-table td {
+    &:not(.cell-actions):not(.cell-status):not(.bx--table-column-checkbox) {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 10vw;
+      vertical-align: middle;
+    }
+
+    &.bx--table-column-checkbox {
+      padding-top: 0;
+      padding-bottom: 0;
+      vertical-align: middle;
+    }
+
+    &.cell-status {
+      vertical-align: middle;
+    }
+
+    &.cell-status, &.cell-actions {
+      width: 40px;
+    }
+  }
+
+  .noRows {
+    width: 100%;
+    text-align: center;
+    font-style: italic;
+    font-size: 1rem;
+  }
+
+  .bx--batch-actions--active {
+    justify-content: flex-end;
+    visibility: visible !important;
+  }
+
+  .bx--batch-actions {
+    visibility: hidden;
+
+    .bx--batch-summary {
+      margin-left: 1rem;
+    }
+  }
+
+  &.tkn--table-with-filters {
+    .bx--data-table-container {
+      overflow: visible;
+    }
+
+    .bx--table-toolbar {
+      overflow: visible;
+      flex-direction: row;
+
+      .bx--multi-select__wrapper {
+        .bx--combo-box {
+          border: none;
+        }
+
+        .bx--text-input {
+          background-color: $ui-01;
+          border: none;
+        }
+      }
+
+      .bx--multi-select__wrapper,
+      .bx--dropdown__wrapper {
+        background-color: $ui-01;
+        display: flex;
+        align-items: center;
+        border-right: 1px solid $ui-03;
+        margin-right: 0;
+        padding-right: $spacing-03;
+        white-space: nowrap;
+
+        .bx--label {
+          padding-left: $spacing-05;
+        }
+
+        .bx--text-input {
+          padding: 0 $spacing-07 0 $spacing-03;
+        }
+
+        .bx--list-box__menu-icon {
+          right: $spacing-03;
+        }
+
+        .bx--dropdown,
+        .bx--multi-select {
+          width: 10rem;
+        }
+
+        .bx--multi-select--inline,
+        .bx--list-box--inline {
+          background-color: $ui-01;
+          height: 100%;
+          max-height: 3rem;
+        }
+
+        .bx--list-box__field {
+          height: 100%;
+
+          input.bx--text-input {
+            &:placeholder-shown {
+              text-overflow: ellipsis;
+            }
+          }
+        }
+
+        &.bx--dropdown__wrapper--inline .bx--label {
+          padding-left: 1rem;
+        }
+
+        @media (max-width: 672px) {
+          &.bx--list-box__wrapper--inline .bx--label {
+            display: none;
+          }
+        }
+      }
+    }
+  }
+}

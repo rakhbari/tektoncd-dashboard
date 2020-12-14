@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import { ALL_NAMESPACES } from '../constants';
+import { ALL_NAMESPACES } from '@tektoncd/dashboard-utils';
 
 export function getCollection(state, namespace) {
   if (namespace === ALL_NAMESPACES) {

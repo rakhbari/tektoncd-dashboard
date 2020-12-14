@@ -1,5 +1,5 @@
 /*
-Copyright 2019 The Tekton Authors
+Copyright 2019-2020 The Tekton Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -12,15 +12,18 @@ limitations under the License.
 */
 
 import React from 'react';
-import { fireEvent, getNodeText, render } from 'react-testing-library';
+import { fireEvent, getNodeText } from '@testing-library/react';
 import { Provider } from 'react-redux';
 import configureStore from 'redux-mock-store';
 import thunk from 'redux-thunk';
+import { renderWithIntl } from '@tektoncd/dashboard-components/src/utils/test';
+
 import PipelineResourcesDropdown from './PipelineResourcesDropdown';
-import * as API from '../../api';
+import * as API from '../../api/pipelineResources';
 
 const props = {
-  id: 'pipeline-resources-dropdown'
+  id: 'pipeline-resources-dropdown',
+  onChange: () => {}
 };
 
 const pipelineResourcesByNamespace = {
@@ -121,257 +124,282 @@ const checkDropdownItems = ({
 const middleware = [thunk];
 const mockStore = configureStore(middleware);
 
-beforeEach(() => {
-  jest
-    .spyOn(API, 'getPipelineResources')
-    .mockImplementation(() => pipelineResourcesById);
-});
+describe('PipelineResourcesDropdown', () => {
+  beforeEach(() => {
+    jest
+      .spyOn(API, 'getPipelineResources')
+      .mockImplementation(() => pipelineResourcesById);
+  });
 
-it('PipelineResourcesDropdown renders items based on Redux state', () => {
-  const store = mockStore({
-    ...pipelineResourcesStoreDefault,
-    ...namespacesStoreBlue
+  it('renders items based on Redux state', () => {
+    const store = mockStore({
+      ...pipelineResourcesStoreDefault,
+      ...namespacesStoreBlue,
+      notifications: {}
+    });
+    const { getByPlaceholderText, getAllByText, queryByText } = renderWithIntl(
+      <Provider store={store}>
+        <PipelineResourcesDropdown {...props} />
+      </Provider>
+    );
+    // View items
+    fireEvent.click(getByPlaceholderText(initialTextRegExp));
+    checkDropdownItems({
+      getAllByText,
+      queryByText,
+      testDict: pipelineResourcesByNamespace.blue
+    });
   });
-  const { getByText, getAllByText, queryByText } = render(
-    <Provider store={store}>
-      <PipelineResourcesDropdown {...props} />
-    </Provider>
-  );
-  // View items
-  fireEvent.click(getByText(initialTextRegExp));
-  checkDropdownItems({
-    getAllByText,
-    queryByText,
-    testDict: pipelineResourcesByNamespace.blue
-  });
-});
 
-it('PipelineResourcesDropdown renders items based on type', () => {
-  const store = mockStore({
-    ...pipelineResourcesStoreDefault,
-    ...namespacesStoreBlue
+  it('renders items based on type', () => {
+    const store = mockStore({
+      ...pipelineResourcesStoreDefault,
+      ...namespacesStoreBlue,
+      notifications: {}
+    });
+    const { getByPlaceholderText, queryByText, rerender } = renderWithIntl(
+      <Provider store={store}>
+        <PipelineResourcesDropdown {...props} type="type-1" />
+      </Provider>
+    );
+    // View items
+    fireEvent.click(getByPlaceholderText(initialTextRegExp));
+    expect(queryByText(/pipeline-resource-1/i)).toBeTruthy();
+    expect(queryByText(/pipeline-resource-2/i)).toBeFalsy();
+    fireEvent.click(getByPlaceholderText(initialTextRegExp));
+    renderWithIntl(
+      <Provider store={store}>
+        <PipelineResourcesDropdown {...props} type="type-2" />
+      </Provider>,
+      { rerender }
+    );
+    // View items
+    fireEvent.click(getByPlaceholderText(initialTextRegExp));
+    expect(queryByText(/pipeline-resource-1/i)).toBeFalsy();
+    expect(queryByText(/pipeline-resource-2/i)).toBeTruthy();
   });
-  const { container, getByText, queryByText } = render(
-    <Provider store={store}>
-      <PipelineResourcesDropdown {...props} type="type-1" />
-    </Provider>
-  );
-  // View items
-  fireEvent.click(getByText(initialTextRegExp));
-  expect(queryByText(/pipeline-resource-1/i)).toBeTruthy();
-  expect(queryByText(/pipeline-resource-2/i)).toBeFalsy();
-  fireEvent.click(getByText(initialTextRegExp));
-  render(
-    <Provider store={store}>
-      <PipelineResourcesDropdown {...props} type="type-2" />
-    </Provider>,
-    { container }
-  );
-  // View items
-  fireEvent.click(getByText(initialTextRegExp));
-  expect(queryByText(/pipeline-resource-1/i)).toBeFalsy();
-  expect(queryByText(/pipeline-resource-2/i)).toBeTruthy();
-});
 
-it('PipelineResourcesDropdown renders items based on Redux state when namespace changes', () => {
-  const blueStore = mockStore({
-    ...pipelineResourcesStoreDefault,
-    ...namespacesStoreBlue
-  });
-  const { container, getByText, getAllByText, queryByText } = render(
-    <Provider store={blueStore}>
-      <PipelineResourcesDropdown {...props} />
-    </Provider>
-  );
-  // View items
-  fireEvent.click(getByText(initialTextRegExp));
-  checkDropdownItems({
-    getAllByText,
-    queryByText,
-    testDict: pipelineResourcesByNamespace.blue
-  });
-  fireEvent.click(getByText(initialTextRegExp));
+  it('renders items based on Redux state when namespace changes', () => {
+    const blueStore = mockStore({
+      ...pipelineResourcesStoreDefault,
+      ...namespacesStoreBlue,
+      notifications: {}
+    });
+    const {
+      getByPlaceholderText,
+      getAllByText,
+      queryByText,
+      rerender
+    } = renderWithIntl(
+      <Provider store={blueStore}>
+        <PipelineResourcesDropdown {...props} />
+      </Provider>
+    );
+    // View items
+    fireEvent.click(getByPlaceholderText(initialTextRegExp));
+    checkDropdownItems({
+      getAllByText,
+      queryByText,
+      testDict: pipelineResourcesByNamespace.blue
+    });
+    fireEvent.click(getByPlaceholderText(initialTextRegExp));
 
-  // Change selected namespace from 'blue' to 'green'
-  const greenStore = mockStore({
-    ...pipelineResourcesStoreDefault,
-    ...namespacesStoreGreen
+    // Change selected namespace from 'blue' to 'green'
+    const greenStore = mockStore({
+      ...pipelineResourcesStoreDefault,
+      ...namespacesStoreGreen,
+      notifications: {}
+    });
+    renderWithIntl(
+      <Provider store={greenStore}>
+        <PipelineResourcesDropdown {...props} />
+      </Provider>,
+      { rerender }
+    );
+    // View items
+    fireEvent.click(getByPlaceholderText(initialTextRegExp));
+    checkDropdownItems({
+      getAllByText,
+      queryByText,
+      testDict: pipelineResourcesByNamespace.green
+    });
   });
-  render(
-    <Provider store={greenStore}>
-      <PipelineResourcesDropdown {...props} />
-    </Provider>,
-    { container }
-  );
-  // View items
-  fireEvent.click(getByText(initialTextRegExp));
-  checkDropdownItems({
-    getAllByText,
-    queryByText,
-    testDict: pipelineResourcesByNamespace.green
-  });
-});
 
-it('PipelineResourcesDropdown renders controlled selection', () => {
-  const store = mockStore({
-    ...pipelineResourcesStoreDefault,
-    ...namespacesStoreBlue
+  it('renders controlled selection', () => {
+    const store = mockStore({
+      ...pipelineResourcesStoreDefault,
+      ...namespacesStoreBlue,
+      notifications: {}
+    });
+    // Select item 'pipeline-resource-1'
+    const {
+      queryByPlaceholderText,
+      queryByDisplayValue,
+      rerender
+    } = renderWithIntl(
+      <Provider store={store}>
+        <PipelineResourcesDropdown
+          {...props}
+          selectedItem={{ text: 'pipeline-resource-1' }}
+        />
+      </Provider>
+    );
+    expect(queryByDisplayValue(/pipeline-resource-1/i)).toBeTruthy();
+    // Select item 'pipeline-resource-2'
+    renderWithIntl(
+      <Provider store={store}>
+        <PipelineResourcesDropdown
+          {...props}
+          selectedItem={{ text: 'pipeline-resource-2' }}
+        />
+      </Provider>,
+      { rerender }
+    );
+    expect(queryByDisplayValue(/pipeline-resource-2/i)).toBeTruthy();
+    // No selected item (select item '')
+    renderWithIntl(
+      <Provider store={store}>
+        <PipelineResourcesDropdown {...props} selectedItem="" />
+      </Provider>,
+      { rerender }
+    );
+    expect(queryByPlaceholderText(initialTextRegExp)).toBeTruthy();
   });
-  // Select item 'pipeline-resource-1'
-  const { container, queryByText } = render(
-    <Provider store={store}>
-      <PipelineResourcesDropdown
-        {...props}
-        selectedItem={{ text: 'pipeline-resource-1' }}
-      />
-    </Provider>
-  );
-  expect(queryByText(/pipeline-resource-1/i)).toBeTruthy();
-  // Select item 'pipeline-resource-2'
-  render(
-    <Provider store={store}>
-      <PipelineResourcesDropdown
-        {...props}
-        selectedItem={{ text: 'pipeline-resource-2' }}
-      />
-    </Provider>,
-    { container }
-  );
-  expect(queryByText(/pipeline-resource-2/i)).toBeTruthy();
-  // No selected item (select item '')
-  render(
-    <Provider store={store}>
-      <PipelineResourcesDropdown {...props} selectedItem="" />
-    </Provider>,
-    { container }
-  );
-  expect(queryByText(initialTextRegExp)).toBeTruthy();
-});
 
-it('PipelineResourcesDropdown renders controlled namespace', () => {
-  const store = mockStore({
-    ...pipelineResourcesStoreDefault,
-    ...namespacesStoreBlue
+  it('renders controlled namespace', () => {
+    const store = mockStore({
+      ...pipelineResourcesStoreDefault,
+      ...namespacesStoreBlue,
+      notifications: {}
+    });
+    // Select namespace 'green'
+    const { queryByText, getByPlaceholderText, getAllByText } = renderWithIntl(
+      <Provider store={store}>
+        <PipelineResourcesDropdown {...props} namespace="green" />
+      </Provider>
+    );
+    fireEvent.click(getByPlaceholderText(initialTextRegExp));
+    checkDropdownItems({
+      getAllByText,
+      queryByText,
+      testDict: pipelineResourcesByNamespace.green
+    });
   });
-  // Select namespace 'green'
-  const { queryByText, getByText, getAllByText } = render(
-    <Provider store={store}>
-      <PipelineResourcesDropdown {...props} namespace="green" />
-    </Provider>
-  );
-  fireEvent.click(getByText(initialTextRegExp));
-  checkDropdownItems({
-    getAllByText,
-    queryByText,
-    testDict: pipelineResourcesByNamespace.green
-  });
-});
 
-it('PipelineResourcesDropdown renders empty', () => {
-  const store = mockStore({
-    pipelineResources: {
-      byId: {},
-      byNamespace: {},
-      isFetching: false
-    },
-    ...namespacesStoreBlue
+  it('renders empty', () => {
+    const store = mockStore({
+      pipelineResources: {
+        byId: {},
+        byNamespace: {},
+        isFetching: false
+      },
+      ...namespacesStoreBlue,
+      notifications: {}
+    });
+    const { queryByPlaceholderText } = renderWithIntl(
+      <Provider store={store}>
+        <PipelineResourcesDropdown {...props} />
+      </Provider>
+    );
+    expect(
+      queryByPlaceholderText(
+        /no pipelineresources found in the 'blue' namespace/i
+      )
+    ).toBeTruthy();
+    expect(queryByPlaceholderText(initialTextRegExp)).toBeFalsy();
   });
-  const { queryByText } = render(
-    <Provider store={store}>
-      <PipelineResourcesDropdown {...props} />
-    </Provider>
-  );
-  expect(
-    queryByText(/no pipelineresources found in the 'blue' namespace/i)
-  ).toBeTruthy();
-  expect(queryByText(initialTextRegExp)).toBeFalsy();
-});
 
-it('PipelineResourcesDropdown renders empty all namespaces', () => {
-  const store = mockStore({
-    pipelineResources: {
-      byId: {},
-      byNamespace: {},
-      isFetching: false
-    },
-    ...namespacesStoreAll
+  it('renders empty all namespaces', () => {
+    const store = mockStore({
+      pipelineResources: {
+        byId: {},
+        byNamespace: {},
+        isFetching: false
+      },
+      ...namespacesStoreAll,
+      notifications: {}
+    });
+    const { queryByPlaceholderText } = renderWithIntl(
+      <Provider store={store}>
+        <PipelineResourcesDropdown {...props} />
+      </Provider>
+    );
+    expect(queryByPlaceholderText(/no pipelineresources found/i)).toBeTruthy();
+    expect(queryByPlaceholderText(initialTextRegExp)).toBeFalsy();
   });
-  const { queryByText } = render(
-    <Provider store={store}>
-      <PipelineResourcesDropdown {...props} />
-    </Provider>
-  );
-  expect(queryByText(/no pipelineresources found/i)).toBeTruthy();
-  expect(queryByText(initialTextRegExp)).toBeFalsy();
-});
 
-it('PipelineResourcesDropdown renders empty with type', () => {
-  const store = mockStore({
-    pipelineResources: {
-      byId: {},
-      byNamespace: {},
-      isFetching: false
-    },
-    ...namespacesStoreBlue
+  it('renders empty with type', () => {
+    const store = mockStore({
+      pipelineResources: {
+        byId: {},
+        byNamespace: {},
+        isFetching: false
+      },
+      ...namespacesStoreBlue,
+      notifications: {}
+    });
+    const { queryByPlaceholderText } = renderWithIntl(
+      <Provider store={store}>
+        <PipelineResourcesDropdown {...props} type="bogus" />
+      </Provider>
+    );
+    expect(
+      queryByPlaceholderText(
+        /no pipelineresources found of type 'bogus' in the 'blue' namespace/i
+      )
+    ).toBeTruthy();
+    expect(queryByPlaceholderText(initialTextRegExp)).toBeFalsy();
   });
-  const { queryByText } = render(
-    <Provider store={store}>
-      <PipelineResourcesDropdown {...props} type="bogus" />
-    </Provider>
-  );
-  expect(
-    queryByText(
-      /no pipelineresources found of type 'bogus' in the 'blue' namespace/i
-    )
-  ).toBeTruthy();
-  expect(queryByText(initialTextRegExp)).toBeFalsy();
-});
 
-it('PipelineResourcesDropdown renders empty with type and all namespaces', () => {
-  const store = mockStore({
-    pipelineResources: {
-      byId: {},
-      byNamespace: {},
-      isFetching: false
-    },
-    ...namespacesStoreAll
+  it('renders empty with type and all namespaces', () => {
+    const store = mockStore({
+      pipelineResources: {
+        byId: {},
+        byNamespace: {},
+        isFetching: false
+      },
+      ...namespacesStoreAll,
+      notifications: {}
+    });
+    const { queryByPlaceholderText } = renderWithIntl(
+      <Provider store={store}>
+        <PipelineResourcesDropdown {...props} type="bogus" />
+      </Provider>
+    );
+    expect(
+      queryByPlaceholderText(/no pipelineresources found of type 'bogus'/i)
+    ).toBeTruthy();
+    expect(queryByPlaceholderText(initialTextRegExp)).toBeFalsy();
   });
-  const { queryByText } = render(
-    <Provider store={store}>
-      <PipelineResourcesDropdown {...props} type="bogus" />
-    </Provider>
-  );
-  expect(
-    queryByText(/no pipelineresources found of type 'bogus'/i)
-  ).toBeTruthy();
-  expect(queryByText(initialTextRegExp)).toBeFalsy();
-});
 
-it('PipelineResourcesDropdown renders loading skeleton based on Redux state', () => {
-  const store = mockStore({
-    ...pipelineResourcesStoreFetching,
-    ...namespacesStoreBlue
+  it('renders loading skeleton based on Redux state', () => {
+    const store = mockStore({
+      ...pipelineResourcesStoreFetching,
+      ...namespacesStoreBlue,
+      notifications: {}
+    });
+    const { queryByPlaceholderText } = renderWithIntl(
+      <Provider store={store}>
+        <PipelineResourcesDropdown {...props} />
+      </Provider>
+    );
+    expect(queryByPlaceholderText(initialTextRegExp)).toBeFalsy();
   });
-  const { queryByText } = render(
-    <Provider store={store}>
-      <PipelineResourcesDropdown {...props} />
-    </Provider>
-  );
-  expect(queryByText(initialTextRegExp)).toBeFalsy();
-});
 
-it('PipelineResourcesDropdown handles onChange event', () => {
-  const store = mockStore({
-    ...pipelineResourcesStoreDefault,
-    ...namespacesStoreBlue
+  it('handles onChange event', () => {
+    const store = mockStore({
+      ...pipelineResourcesStoreDefault,
+      ...namespacesStoreBlue,
+      notifications: {}
+    });
+    const onChange = jest.fn();
+    const { getByPlaceholderText, getByText } = renderWithIntl(
+      <Provider store={store}>
+        <PipelineResourcesDropdown {...props} onChange={onChange} />
+      </Provider>
+    );
+    fireEvent.click(getByPlaceholderText(initialTextRegExp));
+    fireEvent.click(getByText(/pipeline-resource-1/i));
+    expect(onChange).toHaveBeenCalledTimes(1);
   });
-  const onChange = jest.fn();
-  const { getByText } = render(
-    <Provider store={store}>
-      <PipelineResourcesDropdown {...props} onChange={onChange} />
-    </Provider>
-  );
-  fireEvent.click(getByText(initialTextRegExp));
-  fireEvent.click(getByText(/pipeline-resource-1/i));
-  expect(onChange).toHaveBeenCalledTimes(1);
 });

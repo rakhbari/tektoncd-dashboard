@@ -1,5 +1,5 @@
 /*
-Copyright 2019 The Tekton Authors
+Copyright 2019-2020 The Tekton Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -11,52 +11,40 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-@import '../../scss/vars';
-
-.header-skeleton {
+.tkn--header-skeleton {
   margin-top: 0.9rem;
   height: 2rem;
   width: 15rem;
 }
 
 main {
-  .bx--structured-list {
-    background-color: white;
+  .bx--data-table-header {
+    background-color: transparent !important;
+  }
+
+  .bx--inline-notification {
+    max-width: 100%;
+
+    .bx--inline-notification__text-wrapper {
+      align-items: center;
+    }
   }
 }
 
-.definition .status {
-  .status-icon {
+.tkn--definition .tkn--status {
+  display: flex;
+
+  .tkn--status-icon {
     margin-right: 0.5em;
     vertical-align: sub;
+    flex-shrink: 0;
   }
-
-  &:not([data-status]) {
-    .status-icon {
-      fill: $unknown;
-    }
-  }
-
-  &[data-status='True'] {
-    .status-icon {
-      fill: $success;
-    }
-  }
-
-  &[data-status='False'] {
-    .status-icon {
-      fill: $failed;
-    }
-  }
-
-  &[data-status='Unknown'][data-reason='Running'] {
-    .status-icon {
-      fill: $running;
-    }
-  }
-
 }
 
-.resource-info-icon{
+.bx--overflow-menu--flip.bx--overflow-menu-options::after {
+  display: none;
+}
+
+.tkn--resource-info-icon {
   float: right;
 }

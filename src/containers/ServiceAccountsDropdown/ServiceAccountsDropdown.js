@@ -12,16 +12,18 @@ limitations under the License.
 */
 
 import React from 'react';
+import { injectIntl } from 'react-intl';
 import { connect } from 'react-redux';
+import { ALL_NAMESPACES } from '@tektoncd/dashboard-utils';
+import { TooltipDropdown } from '@tektoncd/dashboard-components';
 
 import {
   getSelectedNamespace,
   getServiceAccounts,
-  isFetchingServiceAccounts
+  isFetchingServiceAccounts,
+  isWebSocketConnected
 } from '../../reducers';
 import { fetchServiceAccounts } from '../../actions/serviceAccounts';
-import TooltipDropdown from '../../components/TooltipDropdown';
-import { ALL_NAMESPACES } from '../../constants';
 
 class ServiceAccountsDropdown extends React.Component {
   componentDidMount() {
@@ -30,27 +32,56 @@ class ServiceAccountsDropdown extends React.Component {
   }
 
   componentDidUpdate(prevProps) {
-    const { namespace } = this.props;
-    if (namespace !== prevProps.namespace) {
+    const { namespace, webSocketConnected } = this.props;
+    const { webSocketConnected: prevWebSocketConnected } = prevProps;
+    if (
+      namespace !== prevProps.namespace ||
+      (webSocketConnected && prevWebSocketConnected === false)
+    ) {
       this.props.fetchServiceAccounts({ namespace });
     }
   }
 
   render() {
-    const { namespace, ...rest } = this.props;
+    const {
+      fetchServiceAccounts: _fetchServiceAccounts,
+      intl,
+      label,
+      namespace,
+      webSocketConnected,
+      ...rest
+    } = this.props;
     const emptyText =
       namespace === ALL_NAMESPACES
-        ? `No Service Accounts found`
-        : `No Service Accounts found in the '${namespace}' namespace`;
-    return <TooltipDropdown {...rest} emptyText={emptyText} />;
+        ? intl.formatMessage({
+            id: 'dashboard.serviceAccountsDropdown.empty.allNamespaces',
+            defaultMessage: 'No ServiceAccounts found'
+          })
+        : intl.formatMessage(
+            {
+              id: 'dashboard.serviceAccountsDropdown.empty.selectedNamespace',
+              defaultMessage:
+                "No ServiceAccounts found in the ''{namespace}'' namespace"
+            },
+            { namespace }
+          );
+
+    const labelString =
+      label ||
+      intl.formatMessage({
+        id: 'dashboard.serviceAccountsDropdown.label',
+        defaultMessage: 'Select ServiceAccount'
+      });
+    return (
+      <TooltipDropdown {...rest} emptyText={emptyText} label={labelString} />
+    );
   }
 }
 
 ServiceAccountsDropdown.defaultProps = {
   items: [],
   loading: false,
-  label: 'Select Service Account',
-  titleText: 'Service Account'
+  titleText: 'ServiceAccount'
 };
 
 function mapStateToProps(state, ownProps) {
@@ -58,7 +89,8 @@ function mapStateToProps(state, ownProps) {
   return {
     items: getServiceAccounts(state, { namespace }).map(sa => sa.metadata.name),
     loading: isFetchingServiceAccounts(state),
-    namespace
+    namespace,
+    webSocketConnected: isWebSocketConnected(state)
   };
 }
 
@@ -69,4 +101,4 @@ const mapDispatchToProps = {
 export default connect(
   mapStateToProps,
   mapDispatchToProps
-)(ServiceAccountsDropdown);
+)(injectIntl(ServiceAccountsDropdown));

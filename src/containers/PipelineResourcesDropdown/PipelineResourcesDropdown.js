@@ -12,16 +12,18 @@ limitations under the License.
 */
 
 import React from 'react';
+import { injectIntl } from 'react-intl';
 import { connect } from 'react-redux';
+import { ALL_NAMESPACES } from '@tektoncd/dashboard-utils';
+import { TooltipDropdown } from '@tektoncd/dashboard-components';
 
 import {
   getPipelineResources,
   getSelectedNamespace,
-  isFetchingPipelineResources
+  isFetchingPipelineResources,
+  isWebSocketConnected
 } from '../../reducers';
 import { fetchPipelineResources } from '../../actions/pipelineResources';
-import TooltipDropdown from '../../components/TooltipDropdown';
-import { ALL_NAMESPACES } from '../../constants';
 
 class PipelineResourcesDropdown extends React.Component {
   componentDidMount() {
@@ -30,30 +32,78 @@ class PipelineResourcesDropdown extends React.Component {
   }
 
   componentDidUpdate(prevProps) {
-    const { namespace } = this.props;
-    if (namespace !== prevProps.namespace) {
+    const { namespace, webSocketConnected } = this.props;
+    const { webSocketConnected: prevWebSocketConnected } = prevProps;
+    if (
+      namespace !== prevProps.namespace ||
+      (webSocketConnected && prevWebSocketConnected === false)
+    ) {
       this.props.fetchPipelineResources({ namespace });
     }
   }
 
   render() {
-    const { namespace, type, ...rest } = this.props;
-    let emptyText = 'No PipelineResources found';
+    const {
+      fetchPipelineResources: _fetchPipelineResources,
+      intl,
+      label,
+      namespace,
+      type,
+      webSocketConnected,
+      ...rest
+    } = this.props;
+    let emptyText = intl.formatMessage({
+      id: 'dashboard.pipelineResourcesDropdown.empty.allNamespaces',
+      defaultMessage: 'No PipelineResources found'
+    });
     if (type && namespace !== ALL_NAMESPACES) {
-      emptyText = `No PipelineResources found of type '${type}' in the '${namespace}' namespace`;
+      emptyText = intl.formatMessage(
+        {
+          id:
+            'dashboard.pipelineResourcesDropdown.empty.selectedNamespace.type',
+          defaultMessage:
+            "No PipelineResources found of type ''{type}'' in the ''{namespace}'' namespace"
+        },
+        {
+          namespace,
+          type
+        }
+      );
     } else if (type) {
-      emptyText = `No PipelineResources found of type '${type}'`;
+      emptyText = intl.formatMessage(
+        {
+          id: 'dashboard.pipelineResourcesDropdown.empty.allNamespaces.type',
+          defaultMessage: "No PipelineResources found of type ''{type}''"
+        },
+        { type }
+      );
     } else if (namespace !== ALL_NAMESPACES) {
-      emptyText = `No PipelineResources found in the '${namespace}' namespace`;
+      emptyText = intl.formatMessage(
+        {
+          id: 'dashboard.pipelineResourcesDropdown.empty.selectedNamespace',
+          defaultMessage:
+            "No PipelineResources found in the ''{namespace}'' namespace"
+        },
+        { namespace }
+      );
     }
-    return <TooltipDropdown {...rest} emptyText={emptyText} />;
+
+    const labelString =
+      label ||
+      intl.formatMessage({
+        id: 'dashboard.pipelineResourcesDropdown.label',
+        defaultMessage: 'Select PipelineResource'
+      });
+
+    return (
+      <TooltipDropdown {...rest} emptyText={emptyText} label={labelString} />
+    );
   }
 }
 
 PipelineResourcesDropdown.defaultProps = {
   items: [],
   loading: false,
-  label: 'Select PipelineResource',
   titleText: 'PipelineResource'
 };
 
@@ -65,7 +115,8 @@ function mapStateToProps(state, ownProps) {
       .filter(pipelineResource => !type || type === pipelineResource.spec.type)
       .map(pipelineResource => pipelineResource.metadata.name),
     loading: isFetchingPipelineResources(state),
-    namespace
+    namespace,
+    webSocketConnected: isWebSocketConnected(state)
   };
 }
 
@@ -76,4 +127,4 @@ const mapDispatchToProps = {
 export default connect(
   mapStateToProps,
   mapDispatchToProps
-)(PipelineResourcesDropdown);
+)(injectIntl(PipelineResourcesDropdown));

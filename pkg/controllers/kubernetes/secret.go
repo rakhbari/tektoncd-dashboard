@@ -1,53 +1,37 @@
+/*
+Copyright 2019-2020 The Tekton Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+		http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package kubernetes
 
 import (
 	"github.com/tektoncd/dashboard/pkg/broadcaster"
-	"github.com/tektoncd/dashboard/pkg/endpoints"
-	logging "github.com/tektoncd/dashboard/pkg/logging"
-	v1 "k8s.io/api/core/v1"
+	controllerUtils "github.com/tektoncd/dashboard/pkg/controllers/utils"
+	"github.com/tektoncd/dashboard/pkg/logging"
+	"github.com/tektoncd/dashboard/pkg/utils"
 	k8sinformer "k8s.io/client-go/informers"
-	"k8s.io/client-go/tools/cache"
 )
 
+// NewSecretController registers the K8s shared informer that reacts to
+// create, update and delete events for secrets
 func NewSecretController(sharedK8sInformerFactory k8sinformer.SharedInformerFactory) {
 	logging.Log.Debug("In NewSecretController")
-	k8sInformer := sharedK8sInformerFactory.Core().V1().Secrets()
-	k8sInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    secretCreated,
-		UpdateFunc: secretUpdated,
-		DeleteFunc: secretDeleted,
-	})
-}
 
-func secretCreated(obj interface{}) {
-	logging.Log.Debugf("Secret Controller detected secret '%s' created", obj.(*v1.Secret).Name)
-	data := broadcaster.SocketData{
-		MessageType: broadcaster.SecretCreated,
-		Payload:     obj,
-	}
-
-	endpoints.ResourcesChannel <- data
-}
-
-func secretUpdated(oldObj, newObj interface{}) {
-	oldSecret, newSecret := oldObj.(*v1.Secret), newObj.(*v1.Secret)
-	// If resourceVersion differs between old and new, an actual update event was observed
-	if oldSecret.ResourceVersion != newSecret.ResourceVersion {
-		logging.Log.Debugf("Secret Controller detected secret '%s' updated", oldSecret.Name)
-		data := broadcaster.SocketData{
-			MessageType: broadcaster.SecretUpdated,
-			Payload:     newObj,
-		}
-		endpoints.ResourcesChannel <- data
-	}
-}
-
-func secretDeleted(obj interface{}) {
-	logging.Log.Debugf("Secret Controller detected secret '%s' deleted", obj.(*v1.Secret).Name)
-	data := broadcaster.SocketData{
-		MessageType: broadcaster.SecretDeleted,
-		Payload:     obj,
-	}
-
-	endpoints.ResourcesChannel <- data
+	controllerUtils.NewController(
+		"Secret",
+		sharedK8sInformerFactory.Core().V1().Secrets().Informer(),
+		broadcaster.SecretCreated,
+		broadcaster.SecretUpdated,
+		broadcaster.SecretDeleted,
+		utils.SanitizeSecret,
+	)
 }

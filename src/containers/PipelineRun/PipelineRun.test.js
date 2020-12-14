@@ -1,5 +1,5 @@
 /*
-Copyright 2019 The Tekton Authors
+Copyright 2019-2020 The Tekton Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -12,14 +12,16 @@ limitations under the License.
 */
 
 import React from 'react';
-import { waitForElement } from 'react-testing-library';
-import { Provider } from 'react-redux';
-import thunk from 'redux-thunk';
-import configureStore from 'redux-mock-store';
-import { PipelineRunContainer } from './PipelineRun';
-import { renderWithRouter } from '../../utils/test';
+import { waitForElement } from '@testing-library/react';
+import { createIntl } from 'react-intl';
+import { renderWithRouter } from '@tektoncd/dashboard-components/src/utils/test';
 
-beforeEach(jest.resetAllMocks);
+import { PipelineRunContainer } from './PipelineRun';
+
+const intl = createIntl({
+  locale: 'en',
+  defaultLocale: 'en'
+});
 
 it('PipelineRunContainer renders', async () => {
   const pipelineRunName = 'bar';
@@ -29,39 +31,20 @@ it('PipelineRunContainer renders', async () => {
       pipelineRunName
     }
   };
-  const middleware = [thunk];
-  const mockStore = configureStore(middleware);
-  const testStore = mockStore({
-    tasks: {
-      byNamespace: { default: {} }
-    },
-    namespaces: {
-      selected: 'default'
-    },
-    pipelineRuns: {
-      byId: {},
-      byNamespace: { default: {} },
-      errorMessage: null,
-      isFetching: false
-    }
-  });
 
   const { getByText } = renderWithRouter(
-    <Provider store={testStore}>
-      <PipelineRunContainer
-        match={match}
-        fetchTaskRuns={() => Promise.resolve()}
-        fetchPipelineRun={() => Promise.resolve()}
-        fetchTasks={() => Promise.resolve()}
-        fetchClusterTasks={() => Promise.resolve()}
-        error={null}
-        loading={false}
-      />
-    </Provider>
+    <PipelineRunContainer
+      intl={intl}
+      match={match}
+      fetchTaskRuns={() => Promise.resolve()}
+      fetchPipelineRun={() => Promise.resolve()}
+      fetchTasks={() => Promise.resolve()}
+      fetchClusterTasks={() => Promise.resolve()}
+      error={null}
+      loading={false}
+    />
   );
-  await waitForElement(() =>
-    getByText(`PipelineRun ${pipelineRunName} not found`)
-  );
+  await waitForElement(() => getByText(`PipelineRun not found`));
 });
 
 it('PipelineRunContainer handles error state', async () => {
@@ -72,41 +55,16 @@ it('PipelineRunContainer handles error state', async () => {
     }
   };
 
-  const middleware = [thunk];
-  const mockStore = configureStore(middleware);
-
-  const testStore = mockStore({
-    tasks: {
-      byNamespace: { default: {} }
-    },
-    taskRuns: {
-      byId: {},
-      byNamespace: { default: {} },
-      errorMessage: null,
-      isFetching: false
-    },
-    namespaces: {
-      selected: 'default'
-    },
-    pipelineRuns: {
-      byId: {},
-      byNamespace: { default: {} },
-      errorMessage: 'Error',
-      isFetching: false
-    }
-  });
-
   const { getByText } = renderWithRouter(
-    <Provider store={testStore}>
-      <PipelineRunContainer
-        match={match}
-        error="Error"
-        fetchTaskRuns={() => Promise.resolve()}
-        fetchPipelineRun={() => Promise.resolve()}
-        fetchTasks={() => Promise.resolve()}
-        fetchClusterTasks={() => Promise.resolve()}
-      />
-    </Provider>
+    <PipelineRunContainer
+      intl={intl}
+      match={match}
+      error="Error"
+      fetchTaskRuns={() => Promise.resolve()}
+      fetchPipelineRun={() => Promise.resolve()}
+      fetchTasks={() => Promise.resolve()}
+      fetchClusterTasks={() => Promise.resolve()}
+    />
   );
   await waitForElement(() => getByText('Error loading PipelineRun'));
 });

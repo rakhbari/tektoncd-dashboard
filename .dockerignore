@@ -1,3 +1,16 @@
-node_modules
 .git
+.github
+.storybook
+base
+config_frontend
+coverage
 dist
+docs
+node_modules
+overlays
+packages/components/dist
+packages/components/node_modules
+packages/utils/dist
+tekton
+test
+vendor

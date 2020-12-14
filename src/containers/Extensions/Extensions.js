@@ -11,36 +11,36 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import React from 'react';
+import React, { useEffect } from 'react';
+import { injectIntl } from 'react-intl';
 import { Link } from 'react-router-dom';
 import { connect } from 'react-redux';
-import {
-  InlineNotification,
-  StructuredListBody,
-  StructuredListCell,
-  StructuredListHead,
-  StructuredListRow,
-  StructuredListSkeleton,
-  StructuredListWrapper
-} from 'carbon-components-react';
+import { InlineNotification } from 'carbon-components-react';
+import { getErrorMessage, getTitle, urls } from '@tektoncd/dashboard-utils';
+import { Table } from '@tektoncd/dashboard-components';
 
 import {
   getExtensions,
   getExtensionsErrorMessage,
   isFetchingExtensions
 } from '../../reducers';
-import { getErrorMessage, urls } from '../../utils';
 
 import '../../components/Definitions/Definitions.scss';
 
 export const Extensions = /* istanbul ignore next */ ({
   error,
+  intl,
   loading,
   extensions
 }) => {
-  if (loading && !extensions.length) {
-    return <StructuredListSkeleton border />;
-  }
+  useEffect(() => {
+    document.title = getTitle({
+      page: intl.formatMessage({
+        id: 'dashboard.extensions.title',
+        defaultMessage: 'Extensions'
+      })
+    });
+  }, []);
 
   if (error) {
     return (
@@ -48,36 +48,65 @@ export const Extensions = /* istanbul ignore next */ ({
         kind="error"
         hideCloseButton
         lowContrast
-        title="Error loading extensions"
+        title={intl.formatMessage({
+          id: 'dashboard.extensions.errorLoading',
+          defaultMessage: 'Error loading extensions'
+        })}
         subtitle={getErrorMessage(error)}
       />
     );
   }
 
+  const emptyText = intl.formatMessage({
+    id: 'dashboard.extensions.emptyState',
+    defaultMessage: 'No extensions'
+  });
+
   return (
-    <StructuredListWrapper border selection>
-      <StructuredListHead>
-        <StructuredListRow head>
-          <StructuredListCell head>Extension</StructuredListCell>
-        </StructuredListRow>
-      </StructuredListHead>
-      <StructuredListBody>
-        {!extensions.length && (
-          <StructuredListRow>
-            <StructuredListCell>No extensions</StructuredListCell>
-          </StructuredListRow>
-        )}
-        {extensions.map(({ displayName, name }) => {
-          return (
-            <StructuredListRow className="definition" key={name}>
-              <StructuredListCell>
-                <Link to={urls.extensions.byName({ name })}>{displayName}</Link>
-              </StructuredListCell>
-            </StructuredListRow>
-          );
+    <>
+      <h1>
+        {intl.formatMessage({
+          id: 'dashboard.extensions.title',
+          defaultMessage: 'Extensions'
         })}
-      </StructuredListBody>
-    </StructuredListWrapper>
+      </h1>
+
+      <Table
+        headers={[
+          {
+            key: 'name',
+            header: intl.formatMessage({
+              id: 'dashboard.tableHeader.name',
+              defaultMessage: 'Name'
+            })
+          }
+        ]}
+        rows={extensions.map(
+          ({ apiGroup, apiVersion, displayName, extensionType, name }) => ({
+            id: name,
+            name: (
+              <Link
+                to={
+                  extensionType === 'kubernetes-resource'
+                    ? urls.kubernetesResources.all({
+                        group: apiGroup,
+                        version: apiVersion,
+                        type: name
+                      })
+                    : urls.extensions.byName({ name })
+                }
+                title={displayName}
+              >
+                {displayName}
+              </Link>
+            )
+          })
+        )}
+        loading={loading}
+        emptyTextAllNamespaces={emptyText}
+        emptyTextSelectedNamespace={emptyText}
+      />
+    </>
   );
 };
 
@@ -94,4 +123,4 @@ function mapStateToProps(state) {
   };
 }
 
-export default connect(mapStateToProps)(Extensions);
+export default connect(mapStateToProps)(injectIntl(Extensions));

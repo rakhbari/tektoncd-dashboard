@@ -1,0 +1,60 @@
+---
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: dashboard-release
+spec:
+  params:
+    - name: package
+      description: package to release
+      default: github.com/tektoncd/dashboard
+    - name: imageRegistry
+      default: gcr.io/tekton-releases
+    - name: versionTag
+      description: The X.Y.Z version that the artifacts should be tagged with
+    - name: releaseAsLatest
+      description: Whether to tag and publish this release as the latest
+      default: "true"
+  resources:
+    - name: dashboard-source-repo
+      type: git
+    - name: bucket-for-dashboard
+      type: storage
+    - name: builtDashboardImage
+      type: image
+  tasks:
+    - name: build
+      taskRef:
+        name: build-tekton-dashboard
+      resources:
+        inputs:
+          - name: dashboard-source-repo
+            resource: dashboard-source-repo
+        outputs:
+          - name: dashboard-source-repo
+            resource: dashboard-source-repo
+    - name: publish-images
+      runAfter: [build]
+      taskRef:
+        name: publish-tekton-dashboard
+      params:
+        - name: pathToProject
+          value: $(params.package)
+        - name: versionTag
+          value: $(params.versionTag)
+        - name: imageRegistry
+          value: $(params.imageRegistry)
+        - name: releaseAsLatest
+          value: $(params.releaseAsLatest)
+      resources:
+        inputs:
+          - name: dashboard-source-repo
+            resource: dashboard-source-repo
+            from: [build]
+          - name: bucket-for-dashboard
+            resource: bucket-for-dashboard
+        outputs:
+          - name: bucket-for-dashboard
+            resource: bucket-for-dashboard
+          - name: builtDashboardImage
+            resource: builtDashboardImage

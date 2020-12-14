@@ -1,5 +1,5 @@
 /*
-Copyright 2019 The Tekton Authors
+Copyright 2019-2020 The Tekton Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -17,7 +17,12 @@ it('handles init or unknown actions', () => {
   expect(secretsReducer(undefined, { type: 'does_not_exist' })).toEqual({
     byNamespace: {},
     errorMessage: null,
-    isFetching: false
+    deleteErrorMessage: null,
+    createSuccessMessage: false,
+    deleteSuccessMessage: false,
+    isFetching: false,
+    patchErrorMessage: null,
+    patchSuccessMessage: false
   });
 });
 
@@ -33,10 +38,12 @@ it('SECRETS_FETCH_SUCCESS', () => {
   const uid = '0';
   const annotations = { 'tekton.dev/git-0': 'https://github.ibm.com' };
   const secret = {
-    name,
-    uid,
-    annotations,
-    namespace
+    metadata: {
+      name,
+      uid,
+      annotations,
+      namespace
+    }
   };
   const action = {
     type: 'SECRETS_FETCH_SUCCESS',
@@ -49,15 +56,38 @@ it('SECRETS_FETCH_SUCCESS', () => {
 });
 
 it('SECRETS_FETCH_FAILURE', () => {
-  const message = 'fake error message';
-  const error = { message };
+  const error = 'The server reported a conflict';
   const action = {
     type: 'SECRETS_FETCH_FAILURE',
     error
   };
 
   const state = secretsReducer({}, action);
-  expect(selectors.getSecretsErrorMessage(state)).toEqual(message);
+  expect(selectors.getSecretsErrorMessage(state)).toEqual(
+    'The server reported a conflict'
+  );
+});
+
+it('SECRET_PATCH_SUCCESS', () => {
+  const action = {
+    type: 'SECRET_PATCH_SUCCESS'
+  };
+
+  const state = secretsReducer({}, action);
+  expect(selectors.getPatchSecretsSuccessMessage(state)).toEqual(true);
+});
+
+it('SECRET_PATCH_FAILURE', () => {
+  const error = 'The server reported a conflict';
+  const action = {
+    type: 'SECRET_PATCH_FAILURE',
+    error
+  };
+
+  const state = secretsReducer({}, action);
+  expect(selectors.getPatchSecretsErrorMessage(state)).toEqual(
+    'The server reported a conflict'
+  );
 });
 
 it('SECRET_DELETE_SUCCESS for one secret', () => {
@@ -75,7 +105,11 @@ it('SECRET_DELETE_SUCCESS for one secret', () => {
     }
   };
 
-  const action = { type: 'SECRET_DELETE_SUCCESS', secrets };
+  const action = {
+    type: 'SECRET_DELETE_SUCCESS',
+    success: 'Secret(s) deleted successfully',
+    secrets
+  };
   const state = secretsReducer(secretsState, action);
 
   expect(selectors.isFetchingSecrets(state)).toBe(false);
@@ -100,10 +134,74 @@ it('SECRET_DELETE_SUCCESS for multiple secrets', () => {
     }
   };
 
-  const action = { type: 'SECRET_DELETE_SUCCESS', secrets };
+  const action = {
+    type: 'SECRET_DELETE_SUCCESS',
+    success: 'Secret(s) deleted successfully',
+    secrets
+  };
   const state = secretsReducer(secretsState, action);
 
   expect(selectors.isFetchingSecrets(state)).toBe(false);
+});
+
+it('SecretCreated', () => {
+  const secret = {
+    metadata: {
+      creationTimestamp: 'some timestamp',
+      name: 'github-repo-access-secret',
+      namespace: 'default',
+      annotations: {}
+    },
+    type: 'kubernetes.io/basic-auth'
+  };
+
+  const action = { type: 'SecretCreated', payload: secret };
+  const state = secretsReducer({}, action);
+
+  expect(selectors.getSecrets(state, 'default')[0]).toStrictEqual(secret);
+});
+
+it('SecretCreated with unsupported type', () => {
+  const secret = {
+    metadata: {
+      name: 'github-repo-access-secret',
+      namespace: 'default',
+      annotations: {}
+    },
+    type: 'Opaque'
+  };
+
+  const action = { type: 'SecretCreated', payload: secret };
+  const state = secretsReducer({}, action);
+
+  expect(selectors.getSecrets(state, 'default')).toEqual([]);
+});
+
+it('SecretDeleted', () => {
+  const secret = {
+    metadata: {
+      name: 'github-repo-access-secret',
+      namespace: 'default',
+      annotations: {}
+    }
+  };
+  const secretsState = {
+    byNamespace: {
+      default: {
+        'github-repo-access-secret': {
+          uid: '0',
+          name: 'github-repo-access-secret',
+          namespace: 'default',
+          annotations: {}
+        }
+      }
+    }
+  };
+
+  const action = { type: 'SecretDeleted', payload: secret };
+  const state = secretsReducer(secretsState, action);
+
+  expect(selectors.getSecrets(state, 'default')).toStrictEqual([]);
 });
 
 it('getSecrets', () => {

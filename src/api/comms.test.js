@@ -1,5 +1,5 @@
 /*
-Copyright 2019 The Tekton Authors
+Copyright 2019-2020 The Tekton Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -13,9 +13,30 @@ limitations under the License.
 
 import fetchMock from 'fetch-mock';
 
-import { checkStatus, get, getHeaders, post, request } from './comms';
+import {
+  checkStatus,
+  get,
+  getAPIRoot,
+  getHeaders,
+  getPatchHeaders,
+  post,
+  request
+} from './comms';
+import { mockCSRFToken } from '../utils/test';
 
 const uri = 'http://example.com';
+
+describe('getAPIRoot', () => {
+  it('handles base URL with trailing slash', () => {
+    window.history.pushState({}, 'Title', '/path/#hash');
+    expect(getAPIRoot()).toContain('/path');
+  });
+
+  it('handles base URL without trailing slash', () => {
+    window.history.pushState({}, 'Title', '/path#hash');
+    expect(getAPIRoot()).toContain('/path');
+  });
+});
 
 describe('getHeaders', () => {
   it('returns default headers when called with no params', () => {
@@ -29,6 +50,21 @@ describe('getHeaders', () => {
     const result = getHeaders(customHeaders);
     expect(result).toMatchObject(customHeaders);
     expect(result).toMatchObject(getHeaders());
+  });
+});
+
+describe('getPatchHeaders', () => {
+  it('returns default headers when called with no params', () => {
+    expect(getPatchHeaders()).not.toBeNull();
+  });
+
+  it('combines custom headers with the default', () => {
+    const customHeaders = {
+      'X-Foo': 'Bar'
+    };
+    const result = getPatchHeaders(customHeaders);
+    expect(result).toMatchObject(customHeaders);
+    expect(result).toMatchObject(getPatchHeaders());
   });
 });
 
@@ -58,9 +94,28 @@ describe('checkStatus', () => {
   });
 
   it('returns headers on successful create', () => {
+    const headers = { get: jest.fn() };
     const status = 201;
-    const headers = { fake: 'headers' };
-    expect(checkStatus({ ok: true, headers, status })).toEqual(headers);
+    const response = {
+      headers,
+      json: jest.fn(),
+      ok: true,
+      status
+    };
+    expect(checkStatus(response)).toEqual(expect.objectContaining({ headers }));
+  });
+
+  it('handles empty response body', () => {
+    const headers = { get: () => '0' };
+    const status = 201;
+    const response = {
+      headers,
+      ok: true,
+      status
+    };
+    expect(checkStatus(response)).toEqual(
+      expect.objectContaining({ body: null, headers })
+    );
   });
 
   it('throws an error on failure', () => {
@@ -114,6 +169,7 @@ describe('post', () => {
     const data = {
       fake: 'data'
     };
+    mockCSRFToken();
     fetchMock.post(uri, data);
     return post(uri, data).then(() => {
       const options = fetchMock.lastOptions();

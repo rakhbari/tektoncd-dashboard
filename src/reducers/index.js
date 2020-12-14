@@ -1,5 +1,5 @@
 /*
-Copyright 2019 The Tekton Authors
+Copyright 2019-2020 The Tekton Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -12,30 +12,59 @@ limitations under the License.
 */
 
 import { combineReducers } from 'redux';
+import { labels as labelConstants } from '@tektoncd/dashboard-utils';
 
 import clusterTasks, * as clusterTaskSelectors from './clusterTasks';
+import conditions, * as conditionSelectors from './conditions';
+import eventListeners, * as eventListenersSelectors from './eventListeners';
 import extensions, * as extensionSelectors from './extensions';
+import locale, * as localeSelectors from './locale';
 import namespaces, * as namespaceSelectors from './namespaces';
+import notifications, * as notificationSelectors from './notifications';
 import pipelines, * as pipelineSelectors from './pipelines';
 import pipelineResources, * as pipelineResourcesSelectors from './pipelineResources';
 import pipelineRuns, * as pipelineRunsSelectors from './pipelineRuns';
+import properties, * as propertiesSelectors from './properties';
 import secrets, * as secretSelectors from './secrets';
+import triggerTemplates, * as triggerTemplatesSelectors from './triggerTemplates';
+import triggerBindings, * as triggerBindingsSelectors from './triggerBindings';
+import clusterTriggerBindings, * as clusterTriggerBindingsSelectors from './clusterTriggerBindings';
 import serviceAccounts, * as serviceAccountSelectors from './serviceAccounts';
 import tasks, * as taskSelectors from './tasks';
 import taskRuns, * as taskRunsSelectors from './taskRuns';
 
 export default combineReducers({
   clusterTasks,
+  conditions: conditions(),
+  eventListeners: eventListeners(),
   extensions,
+  locale,
   namespaces,
+  notifications,
   pipelines: pipelines(),
   pipelineResources: pipelineResources(),
   pipelineRuns: pipelineRuns(),
+  properties,
   secrets,
   serviceAccounts: serviceAccounts(),
   tasks: tasks(),
-  taskRuns: taskRuns()
+  taskRuns: taskRuns(),
+  triggerBindings: triggerBindings(),
+  clusterTriggerBindings: clusterTriggerBindings(),
+  triggerTemplates: triggerTemplates()
 });
+
+function filterResources({ filters, resources }) {
+  return resources.filter(resource =>
+    filters.every(filter => {
+      const [filterKey, filterValue] = filter.split('=');
+      const { labels } = resource.metadata || resource;
+      return (
+        labels && filterKey && filterValue && labels[filterKey] === filterValue
+      );
+    })
+  );
+}
 
 export function getSelectedNamespace(state) {
   return namespaceSelectors.getSelectedNamespace(state.namespaces);
@@ -45,18 +74,36 @@ export function getNamespaces(state) {
   return namespaceSelectors.getNamespaces(state.namespaces);
 }
 
-export function getServiceAccounts(
+export function getServiceAccount(
   state,
-  { namespace = getSelectedNamespace(state) } = {}
+  { name, namespace = getSelectedNamespace(state) }
 ) {
-  return serviceAccountSelectors.getServiceAccounts(
+  return serviceAccountSelectors.getServiceAccount(
     state.serviceAccounts,
+    name,
     namespace
   );
 }
 
+export function getServiceAccounts(
+  state,
+  { filters = [], namespace = getSelectedNamespace(state) } = {}
+) {
+  const resources = serviceAccountSelectors.getServiceAccounts(
+    state.serviceAccounts,
+    namespace
+  );
+  return filterResources({ filters, resources });
+}
+
 export function isFetchingServiceAccounts(state) {
   return serviceAccountSelectors.isFetchingServiceAccounts(
+    state.serviceAccounts
+  );
+}
+
+export function getServiceAccountsErrorMessage(state) {
+  return serviceAccountSelectors.getServiceAccountsErrorMessage(
     state.serviceAccounts
   );
 }
@@ -88,9 +135,10 @@ export function getPipeline(
 
 export function getPipelines(
   state,
-  { namespace = getSelectedNamespace(state) } = {}
+  { filters = [], namespace = getSelectedNamespace(state) } = {}
 ) {
-  return pipelineSelectors.getPipelines(state.pipelines, namespace);
+  const resources = pipelineSelectors.getPipelines(state.pipelines, namespace);
+  return filterResources({ filters, resources });
 }
 
 export function getPipelinesErrorMessage(state) {
@@ -103,12 +151,13 @@ export function isFetchingPipelines(state) {
 
 export function getPipelineResources(
   state,
-  { namespace = getSelectedNamespace(state) } = {}
+  { filters = [], namespace = getSelectedNamespace(state) } = {}
 ) {
-  return pipelineResourcesSelectors.getPipelineResources(
+  const resources = pipelineResourcesSelectors.getPipelineResources(
     state.pipelineResources,
     namespace
   );
+  return filterResources({ filters, resources });
 }
 
 export function getPipelineResource(
@@ -136,17 +185,13 @@ export function isFetchingPipelineResources(state) {
 
 export function getPipelineRuns(
   state,
-  { namespace = getSelectedNamespace(state) } = {}
+  { filters, namespace = getSelectedNamespace(state) } = {}
 ) {
-  return pipelineRunsSelectors.getPipelineRuns(state.pipelineRuns, namespace);
-}
-
-export function getPipelineRunsByPipelineName(
-  state,
-  { name, namespace = getSelectedNamespace(state) }
-) {
-  const runs = getPipelineRuns(state, { namespace });
-  return runs.filter(pipelineRun => pipelineRun.spec.pipelineRef.name === name);
+  const resources = pipelineRunsSelectors.getPipelineRuns(
+    state.pipelineRuns,
+    namespace
+  );
+  return filterResources({ filters, resources });
 }
 
 export function getPipelineRun(
@@ -175,11 +220,24 @@ export function getTaskRun(
   return taskRunsSelectors.getTaskRun(state.taskRuns, name, namespace);
 }
 
-export function getTaskRuns(
+export function getTaskRunsByPipelineRunName(
   state,
+  pipelineRunName,
   { namespace = getSelectedNamespace(state) } = {}
 ) {
-  return taskRunsSelectors.getTaskRuns(state.taskRuns, namespace);
+  const resources = taskRunsSelectors.getTaskRuns(state.taskRuns, namespace);
+  return filterResources({
+    filters: [`${labelConstants.PIPELINE_RUN}=${pipelineRunName}`],
+    resources
+  });
+}
+
+export function getTaskRuns(
+  state,
+  { filters, namespace = getSelectedNamespace(state) } = {}
+) {
+  const resources = taskRunsSelectors.getTaskRuns(state.taskRuns, namespace);
+  return filterResources({ filters, resources });
 }
 
 export function getTaskRunsErrorMessage(state) {
@@ -190,21 +248,12 @@ export function isFetchingTaskRuns(state) {
   return taskRunsSelectors.isFetchingTaskRuns(state.taskRuns);
 }
 
-export function getTaskRunsByTaskName(
-  state,
-  { name, namespace = getSelectedNamespace(state) }
-) {
-  const runs = getTaskRuns(state, { namespace });
-  return runs.filter(taskRun => {
-    return taskRun.spec.taskRef && taskRun.spec.taskRef.name === name;
-  });
-}
-
 export function getTasks(
   state,
-  { namespace = getSelectedNamespace(state) } = {}
+  { filters = [], namespace = getSelectedNamespace(state) } = {}
 ) {
-  return taskSelectors.getTasks(state.tasks, namespace);
+  const resources = taskSelectors.getTasks(state.tasks, namespace);
+  return filterResources({ filters, resources });
 }
 
 export function getTask(
@@ -222,8 +271,9 @@ export function isFetchingTasks(state) {
   return taskSelectors.isFetchingTasks(state.tasks);
 }
 
-export function getClusterTasks(state) {
-  return clusterTaskSelectors.getClusterTasks(state.clusterTasks);
+export function getClusterTasks(state, { filters = [] } = {}) {
+  const resources = clusterTaskSelectors.getClusterTasks(state.clusterTasks);
+  return filterResources({ filters, resources });
 }
 
 export function getClusterTask(state, name) {
@@ -247,17 +297,265 @@ export function getTaskByType(
     : getTask(state, { name, namespace });
 }
 
+export function getCondition(
+  state,
+  { name, namespace = getSelectedNamespace(state) }
+) {
+  return conditionSelectors.getCondition(state.conditions, name, namespace);
+}
+
+export function getConditions(
+  state,
+  { filters = [], namespace = getSelectedNamespace(state) } = {}
+) {
+  const resources = conditionSelectors.getConditions(
+    state.conditions,
+    namespace
+  );
+  return filterResources({ filters, resources });
+}
+
+export function getConditionsErrorMessage(state) {
+  return conditionSelectors.getConditionsErrorMessage(state.conditions);
+}
+
+export function isFetchingConditions(state) {
+  return conditionSelectors.isFetchingConditions(state.conditions);
+}
+
 export function getSecrets(
   state,
-  { namespace = getSelectedNamespace(state) } = {}
+  { filters = [], namespace = getSelectedNamespace(state) } = {}
 ) {
-  return secretSelectors.getSecrets(state.secrets, namespace);
+  const allSecrets = secretSelectors.getSecrets(state.secrets, namespace);
+
+  return allSecrets.filter(secret =>
+    filters.every(filter => {
+      const [filterKey, filterValue] = filter.split('=');
+      return (
+        secret.metadata.labels &&
+        filterKey &&
+        filterValue &&
+        secret.metadata.labels[filterKey] === filterValue
+      );
+    })
+  );
+}
+
+export function getSecret(state, { name, namespace }) {
+  return secretSelectors.getSecret(state.secrets, name, namespace);
 }
 
 export function getSecretsErrorMessage(state) {
   return secretSelectors.getSecretsErrorMessage(state.secrets);
 }
 
+export function getDeleteSecretsErrorMessage(state) {
+  return secretSelectors.getDeleteSecretsErrorMessage(state.secrets);
+}
+
+export function getPatchSecretsErrorMessage(state) {
+  return secretSelectors.getPatchSecretsErrorMessage(state.secrets);
+}
+
+export function getCreateSecretsSuccessMessage(state) {
+  return secretSelectors.getCreateSecretsSuccessMessage(state.secrets);
+}
+
+export function getDeleteSecretsSuccessMessage(state) {
+  return secretSelectors.getDeleteSecretsSuccessMessage(state.secrets);
+}
+
+export function getPatchSecretsSuccessMessage(state) {
+  return secretSelectors.getPatchSecretsSuccessMessage(state.secrets);
+}
+
 export function isFetchingSecrets(state) {
   return secretSelectors.isFetchingSecrets(state.secrets);
+}
+
+export function getLocale(state) {
+  return localeSelectors.getLocale(state.locale);
+}
+
+export function isWebSocketConnected(state) {
+  return notificationSelectors.isWebSocketConnected(state.notifications);
+}
+
+export function getTriggerTemplates(
+  state,
+  { filters, namespace = getSelectedNamespace(state) } = {}
+) {
+  const resources = triggerTemplatesSelectors.getTriggerTemplates(
+    state.triggerTemplates,
+    namespace
+  );
+  return filterResources({ filters, resources });
+}
+
+export function getTriggerTemplate(
+  state,
+  { name, namespace = getSelectedNamespace(state) }
+) {
+  return triggerTemplatesSelectors.getTriggerTemplate(
+    state.triggerTemplates,
+    name,
+    namespace
+  );
+}
+
+export function getTriggerTemplatesErrorMessage(state) {
+  return triggerTemplatesSelectors.getTriggerTemplatesErrorMessage(
+    state.triggerTemplates
+  );
+}
+
+export function isFetchingTriggerTemplates(state) {
+  return triggerTemplatesSelectors.isFetchingTriggerTemplates(
+    state.triggerTemplates
+  );
+}
+
+export function getTriggerBindings(
+  state,
+  { filters, namespace = getSelectedNamespace(state) } = {}
+) {
+  const resources = triggerBindingsSelectors.getTriggerBindings(
+    state.triggerBindings,
+    namespace
+  );
+  return filterResources({ filters, resources });
+}
+
+export function getClusterTriggerBindings(state, { filters } = {}) {
+  const resources = clusterTriggerBindingsSelectors.getClusterTriggerBindings(
+    state.clusterTriggerBindings
+  );
+  return filterResources({ filters, resources });
+}
+
+export function getTriggerBinding(
+  state,
+  { name, namespace = getSelectedNamespace(state) }
+) {
+  return triggerBindingsSelectors.getTriggerBinding(
+    state.triggerBindings,
+    name,
+    namespace
+  );
+}
+
+export function getClusterTriggerBinding(state, { name }) {
+  return clusterTriggerBindingsSelectors.getClusterTriggerBinding(
+    state.clusterTriggerBindings,
+    name
+  );
+}
+
+export function getTriggerBindingsErrorMessage(state) {
+  return triggerBindingsSelectors.getTriggerBindingsErrorMessage(
+    state.triggerBindings
+  );
+}
+
+export function getClusterTriggerBindingsErrorMessage(state) {
+  return clusterTriggerBindingsSelectors.getClusterTriggerBindingsErrorMessage(
+    state.clusterTriggerBindings
+  );
+}
+
+export function isFetchingTriggerBindings(state) {
+  return triggerBindingsSelectors.isFetchingTriggerBindings(
+    state.triggerBindings
+  );
+}
+
+export function isFetchingClusterTriggerBindings(state) {
+  return clusterTriggerBindingsSelectors.isFetchingClusterTriggerBindings(
+    state.clusterTriggerBindings
+  );
+}
+
+export function getEventListeners(
+  state,
+  { filters, namespace = getSelectedNamespace(state) } = {}
+) {
+  const resources = eventListenersSelectors.getEventListeners(
+    state.eventListeners,
+    namespace
+  );
+  return filterResources({ filters, resources });
+}
+
+export function getEventListener(
+  state,
+  { name, namespace = getSelectedNamespace(state) }
+) {
+  return eventListenersSelectors.getEventListener(
+    state.eventListeners,
+    name,
+    namespace
+  );
+}
+
+export function getEventListenersErrorMessage(state) {
+  return eventListenersSelectors.getEventListenersErrorMessage(
+    state.eventListeners
+  );
+}
+
+export function isFetchingEventListeners(state) {
+  return eventListenersSelectors.isFetchingEventListeners(state.eventListeners);
+}
+
+export function isReadOnly(state) {
+  return propertiesSelectors.isReadOnly(state.properties);
+}
+
+export function isOpenShift(state) {
+  return propertiesSelectors.isOpenShift(state.properties);
+}
+
+export function isTriggersInstalled(state) {
+  return propertiesSelectors.isTriggersInstalled(state.properties);
+}
+
+export function getLogoutURL(state) {
+  return propertiesSelectors.getLogoutURL(state.properties);
+}
+
+export function getDashboardNamespace(state) {
+  return propertiesSelectors.getDashboardNamespace(state.properties);
+}
+
+export function getDashboardVersion(state) {
+  return propertiesSelectors.getDashboardVersion(state.properties);
+}
+
+export function getPipelineNamespace(state) {
+  return propertiesSelectors.getPipelineNamespace(state.properties);
+}
+
+export function getPipelineVersion(state) {
+  return propertiesSelectors.getPipelineVersion(state.properties);
+}
+
+export function getTriggersNamespace(state) {
+  return propertiesSelectors.getTriggersNamespace(state.properties);
+}
+
+export function getTriggersVersion(state) {
+  return propertiesSelectors.getTriggersVersion(state.properties);
+}
+
+export function getTenantNamespace(state) {
+  return propertiesSelectors.getTenantNamespace(state.properties);
+}
+
+export function isLogStreamingEnabled(state) {
+  return propertiesSelectors.isLogStreamingEnabled(state.properties);
+}
+
+export function getExternalLogsURL(state) {
+  return propertiesSelectors.getExternalLogsURL(state.properties);
 }

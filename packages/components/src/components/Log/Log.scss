@@ -1,0 +1,91 @@
+/*
+Copyright 2019-2020 The Tekton Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+@import '~@tektoncd/dashboard-components/dist/scss/vars';
+
+pre.tkn--log {
+  position: relative;
+  padding: 2rem 1.6rem 1.3rem 1.6rem;
+  font-family: ibm-plex-mono, monospace;
+  font-size: 0.75rem;
+  @media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 2dppx) {
+    font-size: 0.6875rem;
+  }
+
+  line-height: 0.95rem; // Update the react-window List itemSize if changing this
+  overflow: hidden;
+  background-color: $gray-90; // TODO: should this be $inverse-02 ?
+  color: $gray-10;            //       if so, then this should be $inverse-01
+
+  word-break: normal;
+  word-wrap: normal;
+
+  .bx--skeleton__text {
+    background-color: $skeleton-02;
+
+    &::before {
+      background-color: $skeleton-01;
+    }
+  }
+
+  a {
+    color: $inverse-link;
+  }
+
+  code {
+    white-space: pre;
+    overflow-wrap: normal;
+  }
+
+  .bx--btn-set {
+    position: absolute;
+    top: 0;
+    right: 0;
+  }
+
+  .bx--copy-btn {
+    background-color: $gray-90; // TODO: $inverse-02 - see above
+
+    &:hover {
+      background-color: $gray-80; // TODO: $inverse-hover-ui - see above
+    }
+
+    &:focus {
+      outline-color: white;
+    }
+
+    svg {
+      fill: $gray-10; // TODO: use theme token
+    }
+  }
+
+  .tkn--log-trailer {
+    font-family: ibm-plex-sans, sans-serif;
+    font-weight: bold;
+
+    &[data-status='Completed'] {
+      color: $support-02;
+    }
+    &[data-status='Error'] {
+      color: $support-01;
+    }
+  }
+
+  .tkn--log-container {
+    overflow-x: auto;
+  }
+
+  .tkn--log-container:not(:empty) + .tkn--log-trailer {
+    margin-top: 1rem;
+  }
+}

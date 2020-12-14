@@ -1,5 +1,5 @@
 /*
-Copyright 2019 The Tekton Authors
+Copyright 2019-2020 The Tekton Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -15,16 +15,15 @@ import React from 'react';
 import { Provider } from 'react-redux';
 import configureStore from 'redux-mock-store';
 import thunk from 'redux-thunk';
-import { fireEvent } from 'react-testing-library';
+import { waitForElement } from '@testing-library/react';
+import { renderWithRouter } from '@tektoncd/dashboard-components/src/utils/test';
 
-import { paths } from '../../utils';
-import { renderWithRouter } from '../../utils/test';
-import { ALL_NAMESPACES } from '../../constants';
-import SideNavContainer, { SideNav } from './SideNav';
+import SideNavContainer, { SideNavWithIntl as SideNav } from './SideNav';
 
 it('SideNav renders with extensions', () => {
   const middleware = [thunk];
   const mockStore = configureStore(middleware);
+  const namespace = 'default';
   const store = mockStore({
     extensions: {
       byName: {
@@ -32,33 +31,76 @@ it('SideNav renders with extensions', () => {
           displayName: 'tekton_dashboard_extension',
           name: 'dashboard-extension',
           url: 'sample'
+        },
+        'crd-extension': {
+          apiGroup: 'mygroup',
+          apiVersion: 'v1alpha1',
+          displayName: 'dashboard_crd_extension',
+          extensionType: 'kubernetes-resource',
+          name: 'crd-extension'
+        },
+        'cluster-crd-extension': {
+          apiGroup: 'mygroup',
+          apiVersion: 'v1alpha1',
+          displayName: 'dashboard_cluster_crd_extension',
+          extensionType: 'kubernetes-resource',
+          name: 'cluster-crd-extension',
+          namespaced: false
         }
       }
     },
-    namespaces: { byName: {} }
+    namespaces: { byName: { [namespace]: true }, selected: namespace },
+    properties: {}
   });
   const { queryByText } = renderWithRouter(
     <Provider store={store}>
-      <SideNavContainer />
+      <SideNavContainer location={{ search: '' }} />
     </Provider>
   );
-  expect(queryByText(/pipelines/i)).toBeTruthy();
-  expect(queryByText(/tasks/i)).toBeTruthy();
+  expect(queryByText('Pipelines')).toBeTruthy();
+  expect(queryByText('Tasks')).toBeTruthy();
   expect(queryByText(/tekton_dashboard_extension/i)).toBeTruthy();
+  expect(queryByText(/dashboard_crd_extension/i)).toBeTruthy();
+});
+
+it('SideNav renders with triggers', async () => {
+  const middleware = [thunk];
+  const mockStore = configureStore(middleware);
+  const store = mockStore({
+    extensions: { byName: {} },
+    namespaces: { byName: {} },
+    properties: {
+      TriggersNamespace: 'fake-triggers',
+      TriggersVersion: 'fake-triggers'
+    }
+  });
+  const { queryByText } = renderWithRouter(
+    <Provider store={store}>
+      <SideNavContainer location={{ search: '' }} />
+    </Provider>
+  );
+  await waitForElement(() => queryByText(/about/i));
+  expect(queryByText('Pipelines')).toBeTruthy();
+  expect(queryByText('Tasks')).toBeTruthy();
+  await waitForElement(() => queryByText('EventListeners'));
+  expect(queryByText('TriggerTemplates')).toBeTruthy();
+  expect(queryByText('TriggerBindings')).toBeTruthy();
 });
 
 it('SideNav selects namespace based on URL', () => {
   const middleware = [thunk];
   const mockStore = configureStore(middleware);
   const store = mockStore({
-    namespaces: { byName: {} }
+    namespaces: { byName: {} },
+    properties: {}
   });
   const namespace = 'default';
   const selectNamespace = jest.fn();
-  const { container } = renderWithRouter(
+  const { rerender } = renderWithRouter(
     <Provider store={store}>
       <SideNav
         extensions={[]}
+        location={{ search: '' }}
         match={{ params: { namespace } }}
         selectNamespace={selectNamespace}
       />
@@ -67,128 +109,65 @@ it('SideNav selects namespace based on URL', () => {
   expect(selectNamespace).toHaveBeenCalledWith(namespace);
 
   const updatedNamespace = 'another';
+
   renderWithRouter(
     <Provider store={store}>
       <SideNav
         extensions={[]}
+        location={{ search: '' }}
         match={{ params: { namespace: updatedNamespace } }}
         selectNamespace={selectNamespace}
       />
     </Provider>,
-    { container }
+    { rerender }
   );
-
   expect(selectNamespace).toHaveBeenCalledWith(updatedNamespace);
 
   renderWithRouter(
     <Provider store={store}>
       <SideNav
         extensions={[]}
+        location={{ search: '' }}
         match={{ params: { namespace: updatedNamespace } }}
         selectNamespace={selectNamespace}
       />
     </Provider>,
-    { container }
+    { rerender }
   );
   expect(selectNamespace).toHaveBeenCalledTimes(2);
 });
 
-it('SideNav selects namespace when no namespace in URL', async () => {
+it('SideNav renders import in not read-only mode', async () => {
   const middleware = [thunk];
   const mockStore = configureStore(middleware);
-  const namespace = 'default';
-  const otherNamespace = 'foo';
   const store = mockStore({
-    namespaces: {
-      byName: {
-        [namespace]: true,
-        [otherNamespace]: true
-      },
-      isFetching: false,
-      selected: namespace
-    }
+    extensions: { byName: {} },
+    namespaces: { byName: {} },
+    properties: {}
   });
-  const selectNamespace = jest.fn();
-  const { getByText } = renderWithRouter(
+  const { queryByText } = renderWithRouter(
     <Provider store={store}>
-      <SideNav
-        extensions={[]}
-        namespace={namespace}
-        selectNamespace={selectNamespace}
-      />
+      <SideNavContainer location={{ search: '' }} />
     </Provider>
   );
-  fireEvent.click(getByText(namespace));
-  fireEvent.click(getByText(otherNamespace));
-  expect(selectNamespace).toHaveBeenCalledWith(otherNamespace);
+  await waitForElement(() => queryByText(/Import/i));
 });
 
-it('SideNav redirects to root when all namespaces selected on namespaced URL', async () => {
+it('SideNav does not render import in read-only mode', async () => {
   const middleware = [thunk];
   const mockStore = configureStore(middleware);
-  const namespace = 'default';
   const store = mockStore({
-    namespaces: {
-      byName: {
-        [namespace]: true
-      },
-      isFetching: false,
-      selected: namespace
+    extensions: { byName: {} },
+    namespaces: { byName: {} },
+    properties: {
+      ReadOnly: true
     }
   });
-  const selectNamespace = jest.fn();
-  const push = jest.fn();
-  const { getByText } = renderWithRouter(
+  const { queryByText } = renderWithRouter(
     <Provider store={store}>
-      <SideNav
-        extensions={[]}
-        history={{ push }}
-        match={{ params: { namespace } }}
-        namespace={namespace}
-        selectNamespace={selectNamespace}
-      />
+      <SideNavContainer isReadOnly location={{ search: '' }} />
     </Provider>
   );
-  fireEvent.click(getByText(namespace));
-  fireEvent.click(getByText(/all namespaces/i));
-  expect(selectNamespace).toHaveBeenCalledWith(ALL_NAMESPACES);
-  expect(push).toHaveBeenCalledWith('/');
-});
-
-it('SideNav updates namespace in URL', async () => {
-  const middleware = [thunk];
-  const mockStore = configureStore(middleware);
-  const namespace = 'default';
-  const otherNamespace = 'foo';
-  const store = mockStore({
-    namespaces: {
-      byName: {
-        [namespace]: true,
-        [otherNamespace]: true
-      },
-      isFetching: false,
-      selected: namespace
-    }
-  });
-  const selectNamespace = jest.fn();
-  const push = jest.fn();
-  const { getByText } = renderWithRouter(
-    <Provider store={store}>
-      <SideNav
-        extensions={[]}
-        history={{ push }}
-        match={{
-          params: { namespace },
-          path: paths.pipelines.byNamespace()
-        }}
-        namespace={namespace}
-        selectNamespace={selectNamespace}
-      />
-    </Provider>
-  );
-  selectNamespace.mockClear();
-  fireEvent.click(getByText(namespace));
-  fireEvent.click(getByText(otherNamespace));
-  expect(selectNamespace).not.toHaveBeenCalled();
-  expect(push).toHaveBeenCalledWith(expect.stringContaining(otherNamespace));
+  await waitForElement(() => queryByText(/about/i));
+  expect(queryByText(/import/i)).toBeFalsy();
 });

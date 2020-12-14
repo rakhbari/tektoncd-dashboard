@@ -1,5 +1,5 @@
 /*
-Copyright 2019 The Tekton Authors
+Copyright 2019-2020 The Tekton Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -12,37 +12,68 @@ limitations under the License.
 */
 
 import React, { Component } from 'react';
+import { injectIntl } from 'react-intl';
 import { connect } from 'react-redux';
+import { Link } from 'react-router-dom';
 import PropTypes from 'prop-types';
 import {
   InlineNotification,
   StructuredListSkeleton
 } from 'carbon-components-react';
+import {
+  Log,
+  Rerun,
+  RunHeader,
+  StepDetails,
+  TaskRunDetails,
+  TaskTree
+} from '@tektoncd/dashboard-components';
+import {
+  getStatus,
+  getStepDefinition,
+  getStepStatus,
+  getTitle,
+  queryParams as queryParamConstants,
+  urls
+} from '@tektoncd/dashboard-utils';
 
 import {
+  getLogDownloadButton,
+  getLogsRetriever,
+  getViewChangeHandler
+} from '../../utils';
+
+import {
+  getExternalLogsURL,
   getSelectedNamespace,
   getTaskByType,
   getTaskRun,
-  getTaskRunsErrorMessage
+  getTaskRunsErrorMessage,
+  isReadOnly,
+  isWebSocketConnected,
+  isLogStreamingEnabled as selectIsLogStreamingEnabled
 } from '../../reducers';
 
-import RunHeader from '../../components/RunHeader';
-import StepDetails from '../../components/StepDetails';
-import TaskTree from '../../components/TaskTree';
-import { getStatus, stepsStatus, taskRunStep } from '../../utils';
-
-import '../../components/Run/Run.scss';
+import '@tektoncd/dashboard-components/dist/scss/Run.scss';
 import { fetchTask, fetchTaskByType } from '../../actions/tasks';
 import { fetchTaskRun } from '../../actions/taskRuns';
+import { rerunTaskRun } from '../../api';
 
 const taskTypeKeys = { ClusterTask: 'clustertasks', Task: 'tasks' };
+const { STEP, TASK_RUN_DETAILS, VIEW } = queryParamConstants;
 
 export /* istanbul ignore next */ class TaskRunContainer extends Component {
   // once redux store is available errors will be handled properly with dedicated components
-  static notification({ kind, message }) {
+  static notification({ intl, kind, message }) {
     const titles = {
-      info: 'TaskRun not available',
-      error: 'Error loading TaskRun'
+      info: intl.formatMessage({
+        id: 'dashboard.taskRun.unavailable',
+        defaultMessage: 'TaskRun not available'
+      }),
+      error: intl.formatMessage({
+        id: 'dashboard.taskRun.errorLoading',
+        defaultMessage: 'Error loading TaskRun'
+      })
     };
     return (
       <InlineNotification
@@ -55,63 +86,96 @@ export /* istanbul ignore next */ class TaskRunContainer extends Component {
     );
   }
 
-  state = {
-    loading: true,
-    selectedStepId: null
-  };
+  constructor(props) {
+    super(props);
+    this.showRerunNotification = this.showRerunNotification.bind(this);
+
+    this.state = { loading: true, showRerunNotification: null };
+  }
 
   componentDidMount() {
     const { match, namespace } = this.props;
     const { taskRunName } = match.params;
+    document.title = getTitle({
+      page: 'TaskRun',
+      resourceName: taskRunName
+    });
     this.fetchTaskAndRuns(taskRunName, namespace);
   }
 
   componentDidUpdate(prevProps) {
-    const { match, namespace } = this.props;
+    const { match, namespace, webSocketConnected } = this.props;
     const { taskRunName } = match.params;
-    const { match: prevMatch, namespace: prevNamespace } = prevProps;
+    const {
+      match: prevMatch,
+      namespace: prevNamespace,
+      webSocketConnected: prevWebSocketConnected
+    } = prevProps;
     const { taskRunName: prevTaskRunName } = prevMatch.params;
 
-    if (taskRunName !== prevTaskRunName || namespace !== prevNamespace) {
-      this.setState({ loading: true }); // eslint-disable-line
+    const websocketReconnected =
+      webSocketConnected && prevWebSocketConnected === false;
+
+    if (
+      taskRunName !== prevTaskRunName ||
+      namespace !== prevNamespace ||
+      websocketReconnected
+    ) {
+      this.setState({ loading: !websocketReconnected }); // eslint-disable-line
       this.fetchTaskAndRuns(taskRunName, namespace);
     }
   }
 
+  getLogContainer({ stepName, stepStatus, taskRun }) {
+    const {
+      externalLogsURL,
+      isLogStreamingEnabled,
+      selectedStepId
+    } = this.props;
+
+    if (!selectedStepId || !stepStatus) {
+      return null;
+    }
+
+    const logsRetriever = getLogsRetriever(
+      isLogStreamingEnabled,
+      externalLogsURL
+    );
+
+    return (
+      <Log
+        downloadButton={getLogDownloadButton({ stepStatus, taskRun })}
+        fetchLogs={() => logsRetriever(stepName, stepStatus, taskRun)}
+        key={stepName}
+        stepStatus={stepStatus}
+      />
+    );
+  }
+
   handleTaskSelected = (_, selectedStepId) => {
-    this.setState({ selectedStepId });
+    const { history, location, match } = this.props;
+    const queryParams = new URLSearchParams(location.search);
+
+    if (selectedStepId) {
+      queryParams.set(STEP, selectedStepId);
+      queryParams.delete(TASK_RUN_DETAILS);
+    } else {
+      queryParams.delete(STEP);
+      queryParams.set(TASK_RUN_DETAILS, true);
+    }
+
+    const currentStepId = this.props.selectedStepId;
+    if (selectedStepId !== currentStepId) {
+      queryParams.delete(VIEW);
+    }
+
+    const browserURL = match.url.concat(`?${queryParams.toString()}`);
+    history.push(browserURL);
   };
 
-  loadTaskRun = () => {
-    const { task } = this.props;
-    let { taskRun } = this.props;
-    let { steps } = taskRun.status;
-    if (task) {
-      steps = task.spec.steps; // eslint-disable-line
-    }
-    const taskRunName = taskRun.metadata.name;
-    const taskRunNamespace = taskRun.metadata.namespace;
-    const { reason, status: succeeded } = getStatus(taskRun);
-    const runSteps = stepsStatus(steps, taskRun.status.steps);
-    const { params, resources: inputResources } = taskRun.spec.inputs;
-    const { resources: outputResources } = taskRun.spec.outputs;
-    const { startTime } = taskRun.status;
-    taskRun = {
-      id: taskRun.metadata.uid,
-      pod: taskRun.status.podName,
-      pipelineTaskName: taskRunName,
-      reason,
-      steps: runSteps,
-      succeeded,
-      taskRunName,
-      startTime,
-      namespace: taskRunNamespace,
-      params,
-      inputResources,
-      outputResources
-    };
-    return taskRun;
-  };
+  showRerunNotification(value) {
+    this.setState({ showRerunNotification: value });
+  }
 
   fetchTaskAndRuns(taskRunName, namespace) {
     this.props.fetchTaskRun({ name: taskRunName, namespace }).then(taskRun => {
@@ -129,8 +193,16 @@ export /* istanbul ignore next */ class TaskRunContainer extends Component {
   }
 
   render() {
-    const { loading, selectedStepId } = this.state;
-    const { error } = this.props;
+    const { loading, showRerunNotification } = this.state;
+    const {
+      error,
+      intl,
+      selectedStepId,
+      showTaskRunDetails,
+      task,
+      taskRun,
+      view
+    } = this.props;
 
     if (loading) {
       return <StructuredListSkeleton border />;
@@ -138,47 +210,121 @@ export /* istanbul ignore next */ class TaskRunContainer extends Component {
 
     if (error) {
       return TaskRunContainer.notification({
+        intl,
         kind: 'error',
-        message: 'Error loading TaskRun'
+        message: intl.formatMessage({
+          id: 'dashboard.taskRun.errorLoading',
+          defaultMessage: 'Error loading TaskRun'
+        })
       });
     }
-
-    const taskRun = this.loadTaskRun();
 
     if (!taskRun) {
       return TaskRunContainer.notification({
+        intl,
         kind: 'info',
-        message: 'TaskRun not available'
+        message: intl.formatMessage({
+          id: 'dashboard.taskRun.unavailable',
+          defaultMessage: 'TaskRun not available'
+        })
       });
     }
 
-    const { definition, reason, status, stepName, stepStatus } = taskRunStep(
+    const definition = getStepDefinition({
+      selectedStepId,
+      task,
+      taskRun
+    });
+
+    const stepStatus = getStepStatus({
       selectedStepId,
       taskRun
-    );
+    });
+
+    const {
+      reason: taskRunStatusReason,
+      message: taskRunStatusMessage,
+      status: succeeded
+    } = getStatus(taskRun);
+
+    const logContainer = this.getLogContainer({
+      stepName: selectedStepId,
+      stepStatus,
+      taskRun
+    });
+
+    const onViewChange = getViewChangeHandler(this.props);
+
+    const rerun = !this.props.isReadOnly &&
+      !taskRun.metadata?.labels?.['tekton.dev/pipeline'] && (
+        <Rerun
+          getURL={({ name, namespace }) =>
+            urls.taskRuns.byName({ namespace, taskRunName: name })
+          }
+          run={taskRun}
+          rerun={rerunTaskRun}
+          showNotification={this.showRerunNotification}
+        />
+      );
 
     return (
       <>
+        {showRerunNotification && (
+          <InlineNotification
+            lowContrast
+            actions={
+              showRerunNotification.logsURL ? (
+                <Link
+                  className="bx--inline-notification__text-wrapper"
+                  to={showRerunNotification.logsURL}
+                >
+                  {intl.formatMessage({
+                    id: 'dashboard.run.rerunStatusMessage',
+                    defaultMessage: 'View status'
+                  })}
+                </Link>
+              ) : (
+                ''
+              )
+            }
+            title={showRerunNotification.message}
+            kind={showRerunNotification.kind}
+            caption=""
+          />
+        )}
         <RunHeader
-          lastTransitionTime={taskRun.startTime}
+          lastTransitionTime={taskRun.status?.startTime}
           loading={loading}
-          runName={taskRun.taskRunName}
-          status={taskRun.succeeded}
-        />
-        <div className="tasks">
+          message={taskRunStatusMessage}
+          reason={taskRunStatusReason}
+          runName={taskRun.metadata.name}
+          status={succeeded}
+        >
+          {rerun}
+        </RunHeader>
+        <div className="tkn--tasks">
           <TaskTree
             onSelect={this.handleTaskSelected}
-            selectedTaskId={taskRun.id}
+            selectedStepId={selectedStepId}
+            selectedTaskId={showTaskRunDetails && taskRun.metadata.uid}
             taskRuns={[taskRun]}
           />
-          {selectedStepId && (
+          {(selectedStepId && (
             <StepDetails
               definition={definition}
-              reason={reason}
-              status={status}
-              stepName={stepName}
+              logContainer={logContainer}
+              onViewChange={onViewChange}
+              showIO
+              stepName={selectedStepId}
               stepStatus={stepStatus}
               taskRun={taskRun}
+              view={view}
+            />
+          )) || (
+            <TaskRunDetails
+              onViewChange={onViewChange}
+              taskRun={taskRun}
+              view={view}
             />
           )}
         </div>
@@ -197,8 +343,13 @@ TaskRunContainer.propTypes = {
 
 /* istanbul ignore next */
 function mapStateToProps(state, ownProps) {
-  const { match } = ownProps;
+  const { location, match } = ownProps;
   const { namespace: namespaceParam, taskRunName } = match.params;
+
+  const queryParams = new URLSearchParams(location.search);
+  const selectedStepId = queryParams.get(STEP);
+  const view = queryParams.get(VIEW);
+  const showTaskRunDetails = queryParams.get(TASK_RUN_DETAILS);
 
   const namespace = namespaceParam || getSelectedNamespace(state);
   const taskRun = getTaskRun(state, {
@@ -215,9 +366,16 @@ function mapStateToProps(state, ownProps) {
   }
   return {
     error: getTaskRunsErrorMessage(state),
+    externalLogsURL: getExternalLogsURL(state),
+    isReadOnly: isReadOnly(state),
     namespace,
+    selectedStepId,
+    isLogStreamingEnabled: selectIsLogStreamingEnabled(state),
+    showTaskRunDetails,
     taskRun,
-    task
+    task,
+    view,
+    webSocketConnected: isWebSocketConnected(state)
   };
 }
 
@@ -230,4 +388,4 @@ const mapDispatchToProps = {
 export default connect(
   mapStateToProps,
   mapDispatchToProps
-)(TaskRunContainer);
+)(injectIntl(TaskRunContainer));

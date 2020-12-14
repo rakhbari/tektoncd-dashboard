@@ -7,20 +7,21 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"strconv"
+	"net/url"
+	"reflect"
 	"strings"
 	"testing"
-	"time"
 
-	restful "github.com/emicklei/go-restful"
-	broadcaster "github.com/tektoncd/dashboard/pkg/broadcaster"
+	"github.com/google/go-cmp/cmp"
 	"github.com/tektoncd/dashboard/pkg/endpoints"
+	"github.com/tektoncd/dashboard/pkg/router"
 	. "github.com/tektoncd/dashboard/pkg/router"
 	"github.com/tektoncd/dashboard/pkg/testutils"
 	v1alpha1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1alpha1"
+	v1beta1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 // Router successful response contract
@@ -33,12 +34,11 @@ import (
 // Exclude testing of routes that contain any of these substring values
 var excludeRoutes []string = []string{
 	"/v1/websockets", // No response code
-	"rebuild",        // Returns 201
 	ExtensionRoot,    // Response codes dictated by extension logic
 	"health",         // Returns 204
 	"readiness",      // Returns 204
 	"proxy",          // Kube API server has its own standard
-	"ingress",        // Ingress will not exist
+	"properties",     // Pods and namespace will not exist
 }
 
 var methodRouteMap = make(map[string][]string) // k, v := HTTP_METHOD, []route
@@ -49,8 +49,8 @@ var routeNameMap = make(map[string]string)
 // Router parameters are NOT replaced
 func init() {
 	server, _, _ := testutils.DummyServer()
-	mux, _ := server.Config.Handler.(*restful.Container)
-	for _, registeredWebservices := range mux.RegisteredWebServices() {
+	mux, _ := server.Config.Handler.(*Handler)
+	for _, registeredWebservices := range mux.Container.RegisteredWebServices() {
 		for _, route := range registeredWebservices.Routes() {
 			for _, excludeRoute := range excludeRoutes {
 				if strings.Contains(route.Path, excludeRoute) {
@@ -164,60 +164,7 @@ func validateRoute(t *testing.T, r *endpoints.Resource, httpMethod string, expec
 // Returns stub to be marshalled for dashboard route validation
 func fakeStub(t *testing.T, r *endpoints.Resource, httpMethod, resourceType, namespace, resourceName string) interface{} {
 	t.Logf("Getting fake resource type: %s\n", resourceType)
-	// Cases based on resource substring in mux routes (lowercase)
-	switch resourceType {
-	case "pipelinerun":
-		// ManualPipelineRun require the referenced pipeline to have the same name as the pipeline being created
-		switch httpMethod {
-		case "POST":
-			// Avoid creation collision when checking GET routes for stub
-			_, err := r.PipelineClient.TektonV1alpha1().Pipelines(namespace).Get(resourceName, metav1.GetOptions{})
-			// If pipeline does not exist
-			if err != nil {
-				// TODO: embed in pipelineRun once pipelineSpec is supported
-				// Create pipeline ref for ManualPipelineRun
-				pipeline := v1alpha1.Pipeline{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      resourceName,
-						Namespace: namespace,
-					},
-					Spec: v1alpha1.PipelineSpec{},
-				}
-				_, err := r.PipelineClient.TektonV1alpha1().Pipelines(namespace).Create(&pipeline)
-				if err != nil {
-					t.Fatalf("Error creating pipeline for pipelinerun: %v\n", err)
-				}
-			}
-			return endpoints.ManualPipelineRun{
-				PIPELINENAME: resourceName,
-			}
-		case "PUT":
-			return endpoints.PipelineRunUpdateBody{
-				STATUS: v1alpha1.PipelineRunSpecStatusCancelled,
-			}
-		default:
-			return nil
-		}
-	case "credential":
-		credential := endpoints.Credential{
-			Name:        "fakeCredential",
-			Username:    "thisismyusername",
-			Password:    "password",
-			Description: "cred de jour",
-			URL: map[string]string{
-				"tekton.dev/git-0": "https://github.com",
-			},
-		}
-		if httpMethod == "PUT" {
-			credential.Username = "updated"
-			credential.Password = "updated"
-			credential.Description = "updated"
-		}
-		return credential
-
-	default:
-		return nil
-	}
+	return nil
 }
 
 // Creates resources for GET/{name} routes without corresponding POST to prevent lookup failures
@@ -225,35 +172,35 @@ func makeFake(t *testing.T, r *endpoints.Resource, resourceType, namespace, reso
 	t.Logf("Making fake resource %s with name %s\n", resourceType, resourceName)
 	switch resourceType {
 	case "task":
-		task := v1alpha1.Task{
+		task := v1beta1.Task{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      resourceName,
 				Namespace: namespace,
 			},
 		}
-		_, err := r.PipelineClient.TektonV1alpha1().Tasks(namespace).Create(&task)
+		_, err := r.PipelineClient.TektonV1beta1().Tasks(namespace).Create(&task)
 		if err != nil {
 			t.Fatalf("Error creating task: %v\n", err)
 		}
 	case "taskrun":
-		taskRun := v1alpha1.TaskRun{
+		taskRun := v1beta1.TaskRun{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      resourceName,
 				Namespace: namespace,
 			},
 		}
-		_, err := r.PipelineClient.TektonV1alpha1().TaskRuns(namespace).Create(&taskRun)
+		_, err := r.PipelineClient.TektonV1beta1().TaskRuns(namespace).Create(&taskRun)
 		if err != nil {
 			t.Fatalf("Error creating taskRun: %v\n", err)
 		}
 	case "pipeline":
-		pipeline := v1alpha1.Pipeline{
+		pipeline := v1beta1.Pipeline{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      resourceName,
 				Namespace: namespace,
 			},
 		}
-		_, err := r.PipelineClient.TektonV1alpha1().Pipelines(namespace).Create(&pipeline)
+		_, err := r.PipelineClient.TektonV1beta1().Pipelines(namespace).Create(&pipeline)
 		if err != nil {
 			t.Fatalf("Error creating pipeline: %v\n", err)
 		}
@@ -268,90 +215,6 @@ func makeFake(t *testing.T, r *endpoints.Resource, resourceType, namespace, reso
 		if err != nil {
 			t.Fatalf("Error creating pod: %v\n", err)
 		}
-	case "taskrunlog":
-		pod := corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      resourceName,
-				Namespace: namespace,
-			},
-			Spec: corev1.PodSpec{
-				Containers: []corev1.Container{
-					corev1.Container{
-						Name: endpoints.ContainerPrefix + "Container",
-					},
-				},
-			},
-		}
-		_, err := r.K8sClient.CoreV1().Pods(namespace).Create(&pod)
-		if err != nil {
-			t.Fatalf("Error creating pod: %v\n", err)
-		}
-		taskRun := v1alpha1.TaskRun{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      resourceName,
-				Namespace: namespace,
-			},
-			Spec: v1alpha1.TaskRunSpec{},
-			Status: v1alpha1.TaskRunStatus{
-				PodName: resourceName,
-			},
-		}
-		_, err = r.PipelineClient.TektonV1alpha1().TaskRuns(namespace).Create(&taskRun)
-		if err != nil {
-			t.Fatalf("Error creating taskRun: %v\n", err)
-		}
-	case "pipelinerunlog":
-		pod := corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      resourceName,
-				Namespace: namespace,
-			},
-			Spec: corev1.PodSpec{
-				Containers: []corev1.Container{
-					corev1.Container{
-						Name: endpoints.ContainerPrefix + "Container",
-					},
-				},
-			},
-		}
-		_, err := r.K8sClient.CoreV1().Pods(namespace).Create(&pod)
-		if err != nil {
-			t.Fatalf("Error creating pod: %v\n", err)
-		}
-		taskRun := v1alpha1.TaskRun{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      resourceName,
-				Namespace: namespace,
-			},
-			Spec: v1alpha1.TaskRunSpec{},
-			Status: v1alpha1.TaskRunStatus{
-				PodName: resourceName,
-			},
-		}
-		_, err = r.PipelineClient.TektonV1alpha1().TaskRuns(namespace).Create(&taskRun)
-		if err != nil {
-			t.Fatalf("Error creating taskRun: %v\n", err)
-		}
-		pipelineRun := v1alpha1.PipelineRun{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      resourceName,
-				Namespace: namespace,
-			},
-			Spec: v1alpha1.PipelineRunSpec{},
-			Status: v1alpha1.PipelineRunStatus{
-				TaskRuns: map[string]*v1alpha1.PipelineRunTaskRunStatus{
-					resourceName: &v1alpha1.PipelineRunTaskRunStatus{
-						Status: &v1alpha1.TaskRunStatus{
-							PodName: resourceName,
-						},
-					},
-				},
-			},
-		}
-		_, err = r.PipelineClient.TektonV1alpha1().PipelineRuns(namespace).Create(&pipelineRun)
-		if err != nil {
-			t.Fatalf("Error creating pipelineRun: %v\n", err)
-		}
 	case "pipelineresource":
 		pipelineResource := v1alpha1.PipelineResource{
 			ObjectMeta: metav1.ObjectMeta{
@@ -359,219 +222,109 @@ func makeFake(t *testing.T, r *endpoints.Resource, resourceType, namespace, reso
 				Namespace: namespace,
 			},
 		}
-		_, err := r.PipelineClient.TektonV1alpha1().PipelineResources(namespace).Create(&pipelineResource)
+		_, err := r.PipelineResourceClient.TektonV1alpha1().PipelineResources(namespace).Create(&pipelineResource)
 		if err != nil {
 			t.Fatalf("Error creating pipelineResource: %v\n", err)
 		}
 	}
 }
 
-func TestExtensionRegistration(t *testing.T) {
-	t.Log("Checking extension registration")
-	server, r, installNamespace := testutils.DummyServer()
+func TestMarshalJSON_Extension(t *testing.T) {
+	tests := []struct {
+		name      string
+		extension Extension
+		json      []byte
+	}{
+		{
+			name: "Extension 1",
+			extension: Extension{
+				Name: "ext1",
+				URL: &url.URL{
+					Scheme: "http",
+					Host:   "127.0.0.1",
+					Path:   "/",
+				},
+				Port:           "8080",
+				DisplayName:    "display",
+				BundleLocation: "bundle",
+			},
+			json: []byte(`{"url":"http://127.0.0.1/","name":"ext1","port":"8080","displayname":"display","bundlelocation":"bundle"}`),
+		},
+	}
+	for i := range tests {
+		t.Run(tests[i].name, func(t *testing.T) {
+			json, err := tests[i].extension.MarshalJSON()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if diff := cmp.Diff(tests[i].json, json); diff != "" {
+				t.Errorf("MarshalJSON() mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestGetAllExtensions(t *testing.T) {
+	server, r, _ := testutils.DummyServer()
 	defer server.Close()
 
-	otherNamespace := "ns1"
-	_, err := r.K8sClient.CoreV1().Namespaces().Create(&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: otherNamespace}})
-	if err != nil {
-		t.Fatalf("Error creating namespace '%s': %s\n", otherNamespace, err)
-	}
+	annotations := make(map[string]string)
+	annotations["tekton-dashboard-bundle-location"] = "web/extension.86386c2c.js"
+	annotations["tekton-dashboard-display-name"] = "Webhooks"
+	annotations["tekton-dashboard-endpoints"] = "webhooks.web"
 
-	extensionEndpoints := []string{
-		"robots",
-		"secrets",
-		"pipelineruns",
-	}
-	extensionUrlValue := strings.Join(extensionEndpoints, ExtensionEndpointDelimiter)
-	extensionServers := []*httptest.Server{
-		testutils.DummyExtension(extensionEndpoints...),
-		testutils.DummyExtension(),
-	}
-	var extensionPorts []int32
-	for _, extensionServer := range extensionServers {
-		portDelimiterIndex := strings.LastIndex(extensionServer.URL, ":")
-		port, _ := strconv.Atoi(extensionServer.URL[portDelimiterIndex+1:])
-		extensionPorts = append(extensionPorts, int32(port))
-	}
+	labels := make(map[string]string)
+	labels["app"] = "webhooks-extension"
+	labels["tekton-dashboard-extension"] = "true"
 
-	extensionServices := []corev1.Service{
-		corev1.Service{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "extension1",
-				Namespace: installNamespace,
-				UID:       types.UID(strconv.FormatInt(time.Now().UnixNano(), 10)),
-				Annotations: map[string]string{
-					ExtensionUrlKey:            extensionUrlValue,
-					ExtensionBundleLocationKey: "Location",
-					ExtensionDisplayNameKey:    "Display Name",
-				},
-				Labels: map[string]string{
-					ExtensionLabelKey: ExtensionLabelValue,
-				},
-			},
-			Spec: corev1.ServiceSpec{
-				ClusterIP: "127.0.0.1",
-				Ports: []corev1.ServicePort{
-					{
-						Port: extensionPorts[0],
-					},
-				},
-			},
+	servicePort := corev1.ServicePort{
+		NodePort: 30810, Port: 8080, TargetPort: intstr.FromInt(8080),
+	}
+	servicePorts := []corev1.ServicePort{servicePort}
+
+	service := corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        "testExtension",
+			Namespace:   "tekton-pipelines",
+			Annotations: annotations,
+			Labels:      labels,
+			UID:         "65e6ab11-939b-486a-b2f1-323675676c84",
 		},
-		// No endpoints annotation
-		corev1.Service{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "extension2",
-				Namespace: installNamespace,
-				UID:       types.UID(strconv.FormatInt(time.Now().UnixNano(), 10)),
-				Annotations: map[string]string{
-					ExtensionBundleLocationKey: "Location",
-					ExtensionDisplayNameKey:    "Display Name",
-				},
-				Labels: map[string]string{
-					ExtensionLabelKey: ExtensionLabelValue,
-				},
-			},
-			Spec: corev1.ServiceSpec{
-				ClusterIP: "127.0.0.1",
-				Ports: []corev1.ServicePort{
-					{
-						Port: extensionPorts[1],
-					},
-				},
-			},
+		Spec: corev1.ServiceSpec{
+			ClusterIP: "172.30.155.248",
+			Ports:     servicePorts,
 		},
 	}
+	h := router.Register(*r)
+	h.RegisterExtension(&service)
+	server.Config.Handler = h
 
-	nonExtensionServices := []corev1.Service{
-		corev1.Service{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "non-extension",
-				Namespace: installNamespace,
-				Annotations: map[string]string{
-					ExtensionUrlKey:            "/path",
-					ExtensionBundleLocationKey: "Location",
-					ExtensionDisplayNameKey:    "Display Name",
-				},
-			},
-			Spec: corev1.ServiceSpec{
-				Ports: []corev1.ServicePort{{Port: 9097}},
-			},
-		},
-		corev1.Service{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "non-install-namespace-extension",
-				Namespace: otherNamespace,
-				UID:       types.UID(strconv.FormatInt(time.Now().UnixNano(), 10)),
-				Annotations: map[string]string{
-					ExtensionBundleLocationKey: "Location",
-					ExtensionDisplayNameKey:    "Display Name",
-				},
-				Labels: map[string]string{
-					ExtensionLabelKey: ExtensionLabelValue,
-				},
-			},
-			Spec: corev1.ServiceSpec{
-				ClusterIP: "127.0.0.1",
-				Ports: []corev1.ServicePort{
-					{
-						Port: extensionPorts[1],
-					},
-				},
-			},
-		},
-	}
-	services := append(extensionServices, nonExtensionServices...)
-	subscriber, _ := endpoints.ResourcesBroadcaster.Subscribe()
-	for _, svc := range services {
-		// Create, Delete, then reCreate each service to test register/unregister
-		_, err := r.K8sClient.CoreV1().Services(svc.Namespace).Create(&svc)
-		if err != nil {
-			t.Fatalf("Error creating service '%s': %v\n", svc.Name, err)
-		}
-		err = r.K8sClient.CoreV1().Services(svc.Namespace).Delete(svc.Name, &metav1.DeleteOptions{})
-		if err != nil {
-			t.Fatalf("Error creating service '%s': %v\n", svc.Name, err)
-		}
-		_, err = r.K8sClient.CoreV1().Services(svc.Namespace).Create(&svc)
-		if err != nil {
-			t.Fatalf("Error creating service '%s': %v\n", svc.Name, err)
-		}
-	}
-
-	timeout := time.After(10 * time.Second)
-	var extensionCreates int
-	var extensionDeletes int
-	subChan := subscriber.SubChan()
-	// Wait until all extension creates/deletes are registered by extensionInformer
-	for {
-		select {
-		case <-timeout:
-			t.Fatalf("Timed out waiting for expected services to be registered")
-		case event := <-subChan:
-			switch event.MessageType {
-			case broadcaster.ExtensionCreated:
-				extensionCreates++
-			case broadcaster.ExtensionDeleted:
-				extensionDeletes++
-			}
-		}
-		// All events captured from Create->Delete->Create above
-		if extensionCreates == 2*len(extensionServices) && extensionDeletes == len(extensionServices) {
-			break
-		}
-	}
-
-	// Labels not supported on fake client, manual filter
-	serviceList, err := r.K8sClient.CoreV1().Services(installNamespace).List(metav1.ListOptions{})
-	if err != nil {
-		t.Fatalf("Error obtaining services from K8sClient")
-	}
-
-	// Make requests by parsing service labels/annotations as extensions should
-	for _, service := range serviceList.Items {
-		if value := service.Labels[ExtensionLabelKey]; value == ExtensionLabelValue {
-			// Grab endpoints from service annotation if any
-			endpoints := strings.Split(service.Annotations[ExtensionUrlKey], ExtensionEndpointDelimiter)
-			if len(endpoints) == 0 {
-				endpoints = []string{""}
-			}
-			httpMethods := []string{"GET", "POST", "PUT", "DELETE"}
-			// Look for response from registered routes
-			for _, endpoint := range endpoints {
-				for _, method := range httpMethods {
-					proxyUrl := strings.TrimSuffix(fmt.Sprintf("%s%s/%s/%s", server.URL, ExtensionRoot, service.Name, endpoint), "/")
-					t.Logf("PROXY URL: %s", proxyUrl)
-					httpReq := testutils.DummyHTTPRequest(method, proxyUrl, nil)
-					_, err := http.DefaultClient.Do(httpReq)
-					if err != nil {
-						t.Fatalf("Error getting response for %s with http method %s: %v\n", proxyUrl, method, err)
-					}
-
-					// Test registered route accepts subroute wildcard
-					proxySubroute := proxyUrl + "/subroute1/subroute2"
-					httpReq = testutils.DummyHTTPRequest(method, proxySubroute, nil)
-					_, err = http.DefaultClient.Do(httpReq)
-					if err != nil {
-						t.Fatalf("Error getting response for %s with http method %s: %v\n", proxySubroute, method, err)
-					}
-				}
-			}
-		}
-	}
-	// Test getAllExtensions function
-	httpReq := testutils.DummyHTTPRequest("GET", fmt.Sprintf("%s%s", server.URL, ExtensionRoot), nil)
+	httpReq := testutils.DummyHTTPRequest("GET", fmt.Sprintf("%s/v1/extensions", server.URL), nil)
 	response, err := http.DefaultClient.Do(httpReq)
 	if err != nil {
-		t.Fatalf("Error getting response for getAllExtensions: %v\n", err)
+		t.Fatalf("Error getting extensions: %s", err.Error())
 	}
-	responseExtensions := []Extension{}
-	if err := json.NewDecoder(response.Body).Decode(&responseExtensions); err != nil {
+
+	var extensions []RedactedExtension
+	if err := json.NewDecoder(response.Body).Decode(&extensions); err != nil {
 		t.Fatalf("Error decoding getAllExtensions response: %v\n", err)
 	}
 
-	// Verify the response
-	if len(responseExtensions) != len(extensionServices) {
-		t.Fatalf("Number of extensions: expected: %d, returned: %d", len(extensionServices), len(responseExtensions))
+	url, _ := url.ParseRequestURI(fmt.Sprintf("http://%s:%d", service.Spec.ClusterIP, servicePort.TargetPort.IntVal))
+
+	structValue := reflect.ValueOf((extensions[0]))
+	structType := structValue.Type()
+
+	// This test is roughly to check that the Extension struct is not returned
+	// as it contains a URL element that exposes the IP address.
+	for i := 0; i < structValue.NumField(); i++ {
+		if structType.Field(i).Name == "URL" {
+			t.Error("URL was returned and would expose sensitive data")
+		}
+		if structValue.Field(i).CanInterface() {
+			if structValue.Field(i).Interface() == url {
+				t.Error("URL was found exposing sensitive data")
+			}
+		}
 	}
 }
